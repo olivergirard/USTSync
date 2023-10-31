@@ -134,6 +134,7 @@
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="MidiMoment.cpp" />
+    <ClCompile Include="UTAURead.cpp" />
   </ItemGroup>
   <ItemGroup>
     <ResourceCompile Include="MidiMoment.rc" />
