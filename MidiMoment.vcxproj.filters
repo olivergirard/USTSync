@@ -29,7 +29,7 @@
     </ClInclude>
   </ItemGroup>
   <ItemGroup>
-    <ClCompile Include="MidiMoment.cpp">
+    <ClCompile Include="USTSync.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
     <ClCompile Include="UTAURead.cpp">

@@ -15,7 +15,6 @@ std::vector<Note> notes;
 
 void AnalyzeNotes(std::vector<std::string> ustData)
 {
-
 	float currentTempo = 0;
 	struct Note currentNote;
 
@@ -44,6 +43,7 @@ void AnalyzeNotes(std::vector<std::string> ustData)
 
 int main() {
 
+	
 	//TODO prompt the user for a file...
 	std::string fileName = "C:/Users/azure/source/repos/MidiMoment/usts/ust.ust";
 	std::ifstream file(fileName);
