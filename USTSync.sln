@@ -3,7 +3,7 @@ Microsoft Visual Studio Solution File, Format Version 12.00
 # Visual Studio Version 17
 VisualStudioVersion = 17.7.34024.191
 MinimumVisualStudioVersion = 10.0.40219.1
-Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "MidiMoment", "MidiMoment.vcxproj", "{9F7CE4DC-B98E-47B7-8758-9A3B05ACF6F0}"
+Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "USTSync", "USTSync.vcxproj", "{9F7CE4DC-B98E-47B7-8758-9A3B05ACF6F0}"
 EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
@@ -26,6 +26,6 @@ Global
 		HideSolutionNode = FALSE
 	EndGlobalSection
 	GlobalSection(ExtensibilityGlobals) = postSolution
-		SolutionGuid = {2AB20249-79C8-46BA-BB7B-557743369F9E}
+		SolutionGuid = {02BCFB8D-DB2C-4603-A870-1A108B30DB4D}
 	EndGlobalSection
 EndGlobal

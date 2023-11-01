@@ -1,18 +1,18 @@
 //{{NO_DEPENDENCIES}}
 // Microsoft Visual C++ generated include file.
-// Used by MidiMoment.rc
+// Used by USTSync.rc
 
 #define IDS_APP_TITLE			103
 
 #define IDR_MAINFRAME			128
-#define IDD_MIDIMOMENT_DIALOG	102
+#define IDD_USTSYNC_DIALOG  	102
 #define IDD_ABOUTBOX			103
 #define IDM_ABOUT				104
 #define IDM_EXIT				105
 #define IDM_FILE				106
-#define IDI_MIDIMOMENT			107
+#define IDI_USTSYNC		    	107
 #define IDI_SMALL				108
-#define IDC_MIDIMOMENT			109
+#define IDC_USTSYNC      		109
 #define IDC_MYICON				2
 #ifndef IDC_STATIC
 #define IDC_STATIC				-1

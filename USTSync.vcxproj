@@ -129,7 +129,7 @@
   </ItemDefinitionGroup>
   <ItemGroup>
     <ClInclude Include="framework.h" />
-    <ClInclude Include="MidiMoment.h" />
+    <ClInclude Include="UTAURead.h" />
     <ClInclude Include="Resource.h" />
     <ClInclude Include="targetver.h" />
   </ItemGroup>
@@ -138,10 +138,10 @@
     <ClCompile Include="UTAURead.cpp" />
   </ItemGroup>
   <ItemGroup>
-    <ResourceCompile Include="MidiMoment.rc" />
+    <ResourceCompile Include="USTSync.rc" />
   </ItemGroup>
   <ItemGroup>
-    <Image Include="MidiMoment.ico" />
+    <Image Include="USTSync.ico" />
     <Image Include="small.ico" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />

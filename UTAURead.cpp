@@ -5,47 +5,19 @@
 #include <cerrno>
 #include <cstring>
 
+#include "UTAURead.h"
+#include "shtypes.h"
+
 struct Note {
-	float length = 0;
-	float tempo = 0;
+	double length = 0;
+	double tempo = 0;
 	std::string lyric = "";
 };
 
 std::vector<Note> notes;
 
-void AnalyzeNotes(std::vector<std::string> ustData)
+void UTAURead::AnalyzeNotes(LPWSTR fileName)
 {
-	float currentTempo = 0;
-	struct Note currentNote;
-
-	for (std::string line : ustData) {
-		
-		if (line.find("Length=")) {
-			currentNote.length = std::stof(line.substr(line.find("Length=") + 1));
-		}
-		else if (line.find("Lyric=")) {
-			currentNote.lyric = line.substr(line.find("Lyric=") + 1);
-		}
-		else if (line.find("Tempo=")) {
-			currentNote.tempo = std::stof(line.substr(line.find("Tempo=") + 1));
-		}
-		else if (line.find("[")) {
-
-			/* Assuming a note of length 0 means an empty struct and thus no notes have been read yet. */
-			
-			if (currentNote.length != 0) {
-				/* Should not work for lines [#VERSION] and [#SETTING]. */
-				notes.push_back(currentNote);
-			}
-		}
-	}
-}
-
-int main() {
-
-	
-	//TODO prompt the user for a file...
-	std::string fileName = "C:/Users/azure/source/repos/MidiMoment/usts/ust.ust";
 	std::ifstream file(fileName);
 
 	std::vector<std::string> ustData;
@@ -55,5 +27,28 @@ int main() {
 		ustData.push_back(line);
 	}
 
-	AnalyzeNotes(ustData);
+	float currentTempo = 0;
+	struct Note currentNote;
+
+	for (std::string line : ustData) {
+		
+		if (line.find("Length=") != std::string::npos) {
+			currentNote.length = std::stod(line.substr(line.find("Length=") + 8));
+		}
+		else if (line.find("Lyric=") != std::string::npos) {
+			currentNote.lyric = line.substr(line.find("Lyric=") + 7);
+		}
+		else if (line.find("Tempo=") != std::string::npos) {
+			currentNote.tempo = std::stod(line.substr(line.find("Tempo=") + 7));
+		}
+		else if (line.find("[") != std::string::npos) {
+
+			/* Assuming a note of length 0 means an empty struct and thus no notes have been read yet. */
+			
+			if (currentNote.length != 0) {
+				/* Should not work for lines [#VERSION] and [#SETTING]. */
+				notes.push_back(currentNote);
+			}
+		}
+	}
 }

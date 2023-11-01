@@ -1,0 +1,35 @@
+[#VERSION]
+UST Version1.2
+[#SETTING]
+Tempo=120.00
+Tracks=1
+ProjectName=New Project
+VoiceDir=%VOICE%MOMOKA
+OutFile=
+CacheDir=ust.cache
+Tool1=moresampler.exe
+Tool2=moresampler.exe
+Mode2=True
+[#0000]
+Length=480
+Lyric=R
+NoteNum=60
+PreUtterance=
+[#0001]
+Length=3660
+Lyric=ŒN
+NoteNum=67
+PreUtterance=
+Intensity=100
+Modulation=0
+Envelope=0,101,63,0,101,99,0
+[#0002]
+Length=3660
+Lyric=ŒN
+NoteNum=67
+PreUtterance=
+Intensity=100
+Modulation=0
+Envelope=0,101,63,0,101,99,0
+Tempo=20.00
+[#TRACKEND]

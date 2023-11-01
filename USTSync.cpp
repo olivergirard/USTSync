@@ -1,10 +1,17 @@
-// MidiMoment.cpp : Defines the entry point for the application.
+// USTSync.cpp : Defines the entry point for the application.
 //
 
 #include "framework.h"
-#include "MidiMoment.h"
+#include "resource.h"
 #include "shtypes.h"
 #include "shlobj_core.h"
+#include "UTAURead.h"
+#include <fstream>
+#include <windows.h>
+#include <commdlg.h>
+#include <iostream>
+#include <string>
+#include <sstream>
 
 #define MAX_LOADSTRING 100
 
@@ -29,7 +36,7 @@ int APIENTRY wWinMain(_In_ HINSTANCE hInstance,
 
 	// Initialize global strings
 	LoadStringW(hInstance, IDS_APP_TITLE, szTitle, MAX_LOADSTRING);
-	LoadStringW(hInstance, IDC_MIDIMOMENT, szWindowClass, MAX_LOADSTRING);
+	LoadStringW(hInstance, IDC_USTSYNC, szWindowClass, MAX_LOADSTRING);
 	MyRegisterClass(hInstance);
 
 	// Perform application initialization:
@@ -38,7 +45,7 @@ int APIENTRY wWinMain(_In_ HINSTANCE hInstance,
 		return FALSE;
 	}
 
-	HACCEL hAccelTable = LoadAccelerators(hInstance, MAKEINTRESOURCE(IDC_MIDIMOMENT));
+	HACCEL hAccelTable = LoadAccelerators(hInstance, MAKEINTRESOURCE(IDC_USTSYNC));
 
 	MSG msg;
 
@@ -73,10 +80,10 @@ ATOM MyRegisterClass(HINSTANCE hInstance)
 	wcex.cbClsExtra = 0;
 	wcex.cbWndExtra = 0;
 	wcex.hInstance = hInstance;
-	wcex.hIcon = LoadIcon(hInstance, MAKEINTRESOURCE(IDI_MIDIMOMENT));
+	wcex.hIcon = LoadIcon(hInstance, MAKEINTRESOURCE(IDI_USTSYNC));
 	wcex.hCursor = LoadCursor(nullptr, IDC_ARROW);
 	wcex.hbrBackground = (HBRUSH)(COLOR_WINDOW + 1);
-	wcex.lpszMenuName = MAKEINTRESOURCEW(IDC_MIDIMOMENT);
+	wcex.lpszMenuName = MAKEINTRESOURCEW(IDC_USTSYNC);
 	wcex.lpszClassName = szWindowClass;
 	wcex.hIconSm = LoadIcon(wcex.hInstance, MAKEINTRESOURCE(IDI_SMALL));
 
@@ -132,13 +139,21 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam)
 		switch (wmId)
 		{
 		case IDM_FILE:
+		{
 
-			LPCTSTR filename = NULL;
-			ITEMIDLIST* pidl = ILCreateFromPath(filename);
-			if (pidl) {
-				SHOpenFolderAndSelectItems(pidl, 0, 0, 0);
-				ILFree(pidl);
+			WCHAR buffer[MAX_PATH];
+			OPENFILENAME ofn = {};
+			ofn.lStructSize = sizeof(ofn);
+			//ofn.hwndOwner = ...;
+			ofn.lpstrFilter = TEXT("*.UST\0");
+			ofn.lpstrFile = buffer, ofn.nMaxFile = MAX_PATH, * buffer = '\0';
+			ofn.Flags = OFN_EXPLORER | OFN_ENABLESIZING | OFN_HIDEREADONLY | OFN_PATHMUSTEXIST | OFN_FILEMUSTEXIST;
+			if (GetOpenFileName(&ofn)) {
+				UTAURead::AnalyzeNotes(ofn.lpstrFile);
 			}
+
+			break;
+		}
 		case IDM_ABOUT:
 			DialogBox(hInst, MAKEINTRESOURCE(IDD_ABOUTBOX), hWnd, About);
 			break;
@@ -152,12 +167,10 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam)
 	break;
 	case WM_PAINT:
 	{
-		TCHAR greeting[] = _T("Hello, Windows desktop!");
-
 		PAINTSTRUCT ps;
 		HDC hdc = BeginPaint(hWnd, &ps);
 
-		TextOut(hdc, 5, 5, greeting, _tcslen(greeting));
+		/* TODO: insert paint stuff here. */
 
 		EndPaint(hWnd, &ps);
 	}
