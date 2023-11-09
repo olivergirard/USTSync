@@ -1,17 +1,17 @@
 // USTSync.cpp : Defines the entry point for the application.
 //
-
-#include "framework.h"
-#include "resource.h"
-#include "shtypes.h"
-#include "shlobj_core.h"
-#include "UTAURead.h"
 #include <fstream>
 #include <windows.h>
 #include <commdlg.h>
 #include <iostream>
 #include <string>
 #include <sstream>
+
+#include "framework.h"
+#include "resource.h"
+#include "shtypes.h"
+#include "shlobj_core.h"
+#include "UTAURead.h"
 
 #define MAX_LOADSTRING 100
 
@@ -62,7 +62,40 @@ int APIENTRY wWinMain(_In_ HINSTANCE hInstance,
 	return (int)msg.wParam;
 }
 
+/* My functions. */
 
+void DrawNotes(HWND hWnd) {
+	std::vector<Note> notes = UTAURead::GetNotes();
+
+	HDC hdc;
+	PAINTSTRUCT ps;
+
+	hdc = BeginPaint(hWnd, &ps);
+
+	RECT rectangle = { 0,0,0,0 };
+
+	rectangle.left = 10;
+	rectangle.right = 20;
+	rectangle.top = 220; 
+	rectangle.bottom = 250;
+
+	SetDCPenColor(hdc, RGB(0, 0, 0));
+	SetBkMode(hdc, TRANSPARENT);
+	SetBkColor(hdc, RGB(0, 0, 0));
+
+	for (Note note : notes) {
+
+		rectangle.right += note.length / 7;
+		
+		Rectangle(hdc, rectangle.left, rectangle.top, rectangle.right, rectangle.bottom);
+		DrawText(hdc, LPCWSTR(note.lyric.c_str()), -1, &rectangle, DT_CENTER | DT_SINGLELINE | DT_VCENTER);
+		rectangle.left = rectangle.right + 1;
+	}
+
+	EndPaint(hWnd, &ps);
+}
+
+/* End of my functions. */
 
 //
 //  FUNCTION: MyRegisterClass()
@@ -167,12 +200,11 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam)
 	break;
 	case WM_PAINT:
 	{
-		PAINTSTRUCT ps;
-		HDC hdc = BeginPaint(hWnd, &ps);
-
 		/* TODO: insert paint stuff here. */
-
-		EndPaint(hWnd, &ps);
+		if (UTAURead::WasFileRead() == true) {
+			DrawNotes(hWnd);
+		}
+		
 	}
 	break;
 	case WM_DESTROY:

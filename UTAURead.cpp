@@ -4,44 +4,64 @@
 #include <sstream>
 #include <cerrno>
 #include <cstring>
+#include <io.h>
+#include <fcntl.h>
+#include <stdio.h>
 
 #include "UTAURead.h"
 #include "shtypes.h"
 
-struct Note {
-	double length = 0;
-	double tempo = 0;
-	std::string lyric = "";
-};
+static std::vector<Note> notes;
+static bool fileRead = false;
 
-std::vector<Note> notes;
+std::vector<Note> UTAURead::GetNotes() {
+	return notes;
+}
+
+bool UTAURead::WasFileRead() {
+	return fileRead;
+}
 
 void UTAURead::AnalyzeNotes(LPWSTR fileName)
 {
+	const std::locale locale(".932");
+	std::locale::global(std::locale(".932"));
+
+	std::wifstream in;
+
+	in.imbue(locale);
+	in.open(fileName);
+
 	std::ifstream file(fileName);
 
-	std::vector<std::string> ustData;
-	std::string line;
+	std::vector<std::wstring> ustData;
+	std::wstring data;
+	
+	/* TODO: Remove this debug console. */
+	/*AllocConsole();
+	freopen_s((FILE**)stdout, "CONOUT$", "w", stdout);*/
 
-	while (getline(file, line)) {
-		ustData.push_back(line);
+	while (getline(in, data)) {
+		ustData.push_back(data);
 	}
 
 	float currentTempo = 0;
 	struct Note currentNote;
 
-	for (std::string line : ustData) {
+	for (std::wstring line : ustData) {
+
+		line = line.c_str();
 		
-		if (line.find("Length=") != std::string::npos) {
-			currentNote.length = std::stod(line.substr(line.find("Length=") + 8));
+		if (line.find(L"Length=") != std::string::npos) {
+			currentNote.length = std::stod(line.substr(7));
 		}
-		else if (line.find("Lyric=") != std::string::npos) {
-			currentNote.lyric = line.substr(line.find("Lyric=") + 7);
+		else if (line.find(L"Lyric=") != std::wstring::npos) {
+			currentNote.lyric = line.substr(6);
 		}
-		else if (line.find("Tempo=") != std::string::npos) {
-			currentNote.tempo = std::stod(line.substr(line.find("Tempo=") + 7));
+		else if (line.find(L"Tempo=") != std::string::npos) {
+			currentNote.tempo = std::stod(line.substr(6));
 		}
-		else if (line.find("[") != std::string::npos) {
+		else if (line.find(L"[") != std::string::npos) {
 
 			/* Assuming a note of length 0 means an empty struct and thus no notes have been read yet. */
 			
@@ -51,4 +71,6 @@ void UTAURead::AnalyzeNotes(LPWSTR fileName)
 			}
 		}
 	}
+
+	fileRead = true;
 }
