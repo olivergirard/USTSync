@@ -6,6 +6,8 @@
 #include <iostream>
 #include <string>
 #include <sstream>
+#include <windowsx.h>
+#include <WinUser.h>
 
 #include "framework.h"
 #include "resource.h"
@@ -19,6 +21,14 @@
 HINSTANCE hInst;                                // current instance
 WCHAR szTitle[MAX_LOADSTRING];                  // The title bar text
 WCHAR szWindowClass[MAX_LOADSTRING];            // the main window class name
+
+/* My global variables. */
+int leftX;
+int leftY;
+int rightX;
+int rightY;
+
+bool isRangeSelected = false;
 
 // Forward declarations of functions included in this code module:
 ATOM                MyRegisterClass(HINSTANCE hInstance);
@@ -64,36 +74,41 @@ int APIENTRY wWinMain(_In_ HINSTANCE hInstance,
 
 /* My functions. */
 
-void DrawNotes(HWND hWnd) {
+void DrawNotes(HWND hWnd, HDC hdc) {
+
 	std::vector<Note> notes = UTAURead::GetNotes();
-
-	HDC hdc;
-	PAINTSTRUCT ps;
-
-	hdc = BeginPaint(hWnd, &ps);
 
 	RECT rectangle = { 0,0,0,0 };
 
 	rectangle.left = 10;
 	rectangle.right = 20;
-	rectangle.top = 220; 
+	rectangle.top = 220;
 	rectangle.bottom = 250;
 
 	SetDCPenColor(hdc, RGB(0, 0, 0));
-	SetBkMode(hdc, TRANSPARENT);
-	SetBkColor(hdc, RGB(0, 0, 0));
 
 	for (Note note : notes) {
 
 		rectangle.right += note.length / 7;
-		
+
 		Rectangle(hdc, rectangle.left, rectangle.top, rectangle.right, rectangle.bottom);
 		DrawText(hdc, LPCWSTR(note.lyric.c_str()), -1, &rectangle, DT_CENTER | DT_SINGLELINE | DT_VCENTER);
 		rectangle.left = rectangle.right + 1;
 	}
-
-	EndPaint(hWnd, &ps);
 }
+
+void DrawRange(HWND hWnd, HDC hdc) {
+
+	SetDCPenColor(hdc, RGB(0, 0, 0));
+
+	RECT rectangle = { 0,0,0,0 };
+	rectangle.left = 0;
+	rectangle.right = 50;
+	rectangle.top = 100;
+	rectangle.bottom = 250;
+	Rectangle(hdc, rectangle.left, rectangle.top, rectangle.right, rectangle.bottom);
+}
+
 
 /* End of my functions. */
 
@@ -165,6 +180,24 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam)
 {
 	switch (message)
 	{
+	case WM_LBUTTONDOWN: 
+	{
+
+		if (UTAURead::WasFileRead() == true) {
+			leftX = GET_X_LPARAM(lParam);
+			leftY = GET_Y_LPARAM(lParam);
+			isRangeSelected = true;
+
+			InvalidateRect(hWnd, NULL, FALSE);
+			RedrawWindow(hWnd, NULL, NULL, RDW_INVALIDATE);
+		}
+
+		break;
+	}
+	case WM_LBUTTONUP:
+	{
+		break;
+	}
 	case WM_COMMAND:
 	{
 		int wmId = LOWORD(wParam);
@@ -185,6 +218,9 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam)
 				UTAURead::AnalyzeNotes(ofn.lpstrFile);
 			}
 
+			InvalidateRect(hWnd, NULL, FALSE);
+			RedrawWindow(hWnd, NULL, NULL, RDW_INVALIDATE);
+
 			break;
 		}
 		case IDM_ABOUT:
@@ -201,10 +237,21 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam)
 	case WM_PAINT:
 	{
 		/* TODO: insert paint stuff here. */
-		if (UTAURead::WasFileRead() == true) {
-			DrawNotes(hWnd);
-		}
+		HDC hdc;
+		PAINTSTRUCT ps;
+
+		hdc = BeginPaint(hWnd, &ps);
+
 		
+		if (UTAURead::WasFileRead() == true) {
+			DrawNotes(hWnd, hdc);
+		}
+
+		if (isRangeSelected == true) {
+			DrawRange(hWnd, hdc);
+		}
+
+		EndPaint(hWnd, &ps);
 	}
 	break;
 	case WM_DESTROY:

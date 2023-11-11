@@ -19,6 +19,7 @@ std::vector<Note> UTAURead::GetNotes() {
 }
 
 bool UTAURead::WasFileRead() {
+
 	return fileRead;
 }
 
