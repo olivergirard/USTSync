@@ -8,6 +8,7 @@
 #include <sstream>
 #include <windowsx.h>
 #include <WinUser.h>
+#include <tuple>
 
 #include "framework.h"
 #include "resource.h"
@@ -23,12 +24,18 @@ WCHAR szTitle[MAX_LOADSTRING];                  // The title bar text
 WCHAR szWindowClass[MAX_LOADSTRING];            // the main window class name
 
 /* My global variables. */
-int leftX;
-int leftY;
-int rightX;
-int rightY;
+int leftX = 0;
+int leftY = 0;
+int rightX = 0;
+int rightY = 0;
 
 bool isRangeSelected = false;
+
+RECT selectedRange = { 0, 0, 0, 0 };
+RECT previousRange = { 0, 0, 0, 0 };
+
+std::vector<std::tuple<RECT, std::wstring>> noteRectangles;
+
 
 // Forward declarations of functions included in this code module:
 ATOM                MyRegisterClass(HINSTANCE hInstance);
@@ -74,6 +81,15 @@ int APIENTRY wWinMain(_In_ HINSTANCE hInstance,
 
 /* My functions. */
 
+bool rangeChecker(RECT rectangle) {
+
+	if ((rectangle.left == 0) && (rectangle.right == 0) && (rectangle.top == 0) && (rectangle.bottom == 0)) {
+		return false;
+	}
+
+	return true;
+}
+
 void DrawNotes(HWND hWnd, HDC hdc) {
 
 	std::vector<Note> notes = UTAURead::GetNotes();
@@ -87,12 +103,18 @@ void DrawNotes(HWND hWnd, HDC hdc) {
 
 	SetDCPenColor(hdc, RGB(0, 0, 0));
 
+	noteRectangles.clear();
+
 	for (Note note : notes) {
 
 		rectangle.right += note.length / 7;
 
 		Rectangle(hdc, rectangle.left, rectangle.top, rectangle.right, rectangle.bottom);
 		DrawText(hdc, LPCWSTR(note.lyric.c_str()), -1, &rectangle, DT_CENTER | DT_SINGLELINE | DT_VCENTER);
+
+		std::tuple<RECT, std::wstring> data = std::make_tuple(rectangle, note.lyric);
+		noteRectangles.push_back(data);
+
 		rectangle.left = rectangle.right + 1;
 	}
 }
@@ -100,15 +122,40 @@ void DrawNotes(HWND hWnd, HDC hdc) {
 void DrawRange(HWND hWnd, HDC hdc) {
 
 	SetDCPenColor(hdc, RGB(0, 0, 0));
+	SetBkMode(hdc, TRANSPARENT);
 
-	RECT rectangle = { 0,0,0,0 };
-	rectangle.left = 0;
-	rectangle.right = 50;
-	rectangle.top = 100;
-	rectangle.bottom = 250;
-	Rectangle(hdc, rectangle.left, rectangle.top, rectangle.right, rectangle.bottom);
+	Rectangle(hdc, selectedRange.left, selectedRange.top, selectedRange.right, selectedRange.bottom);
 }
 
+bool Overlap(RECT RectA, RECT RectB) {
+
+	bool widthIsPositive = min(RectA.right, RectB.right) > max(RectA.left, RectB.left);
+	bool heightIsPositive = min(RectA.bottom, RectB.bottom) > max(RectA.top, RectB.top);
+
+	return (widthIsPositive && heightIsPositive);
+}
+
+void SelectRange(HWND hWnd, HDC hdc, RECT selectedRange) {
+
+	for (std::tuple<RECT, std::wstring> tuple : noteRectangles) {
+
+		RECT noteRectangle = std::get<0>(tuple);
+
+		if (Overlap(noteRectangle, selectedRange) == true) {
+
+			HBRUSH hbrush = CreateSolidBrush(RGB(0, 0, 255));
+			FillRect(hdc, &noteRectangle, hbrush);
+
+			SetDCPenColor(hdc, RGB(0, 0, 0));
+			SelectObject(hdc, GetStockObject(NULL_BRUSH));
+			Rectangle(hdc, noteRectangle.left, noteRectangle.top, noteRectangle.right, noteRectangle.bottom);
+
+			SetBkMode(hdc, TRANSPARENT);
+			DrawText(hdc, LPCWSTR(std::get<1>(tuple).c_str()), -1, &noteRectangle, DT_CENTER | DT_SINGLELINE | DT_VCENTER);
+
+		}
+	}
+}
 
 /* End of my functions. */
 
@@ -180,22 +227,42 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam)
 {
 	switch (message)
 	{
-	case WM_LBUTTONDOWN: 
+	case WM_ERASEBKGND:
+		return 1;
+	case WM_LBUTTONDOWN:
 	{
-
 		if (UTAURead::WasFileRead() == true) {
 			leftX = GET_X_LPARAM(lParam);
 			leftY = GET_Y_LPARAM(lParam);
-			isRangeSelected = true;
+			selectedRange.left = leftX;
+			selectedRange.top = leftY;
 
-			InvalidateRect(hWnd, NULL, FALSE);
-			RedrawWindow(hWnd, NULL, NULL, RDW_INVALIDATE);
+			isRangeSelected = true;
 		}
 
 		break;
 	}
 	case WM_LBUTTONUP:
 	{
+		isRangeSelected = false;
+		InvalidateRect(hWnd, NULL, true);
+		break;
+	}
+	case WM_MOUSEMOVE:
+	{
+		if (isRangeSelected == true) {
+			rightX = GET_X_LPARAM(lParam);
+			rightY = GET_Y_LPARAM(lParam);
+			selectedRange.right = rightX;
+			selectedRange.bottom = rightY;
+
+			InvalidateRect(hWnd, NULL, false);
+
+			if (previousRange.right > selectedRange.right && previousRange.bottom > selectedRange.bottom) {
+				InvalidateRect(hWnd, &previousRange, true);
+			}
+		}
+
 		break;
 	}
 	case WM_COMMAND:
@@ -218,8 +285,7 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam)
 				UTAURead::AnalyzeNotes(ofn.lpstrFile);
 			}
 
-			InvalidateRect(hWnd, NULL, FALSE);
-			RedrawWindow(hWnd, NULL, NULL, RDW_INVALIDATE);
+			InvalidateRect(hWnd, NULL, false);
 
 			break;
 		}
@@ -240,16 +306,46 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam)
 		HDC hdc;
 		PAINTSTRUCT ps;
 
+		HDC hdcMem;
+		HBITMAP hbmMem;
+		HANDLE hOld;
+
 		hdc = BeginPaint(hWnd, &ps);
 
+		hdcMem = CreateCompatibleDC(hdc);
+
+		RECT rect;
+		GetWindowRect(hWnd, &rect);
+		int width = rect.right - rect.left;
+		int height = rect.bottom - rect.top;
+
+		hbmMem = CreateCompatibleBitmap(hdc, width, height);
+		hOld = SelectObject(hdcMem, hbmMem);
 		
-		if (UTAURead::WasFileRead() == true) {
-			DrawNotes(hWnd, hdc);
+		if ((UTAURead::WasFileRead() == true)) {
+			DrawNotes(hWnd, hdcMem);
+		}
+		
+		if (((rightX != 0) || (rightY != 0)) && (isRangeSelected == true)) {
+			previousRange = selectedRange;
+			DrawRange(hWnd, hdcMem);
 		}
 
-		if (isRangeSelected == true) {
-			DrawRange(hWnd, hdc);
+		if ((isRangeSelected == false) && (rangeChecker(selectedRange) == true)) {
+			previousRange = { 0, 0, 0, 0 };
+
+			leftX = 0;
+			leftY = 0;
+			rightX = 0;
+			rightY = 0;
+
+			SelectRange(hWnd, hdcMem, selectedRange);
 		}
+
+		BitBlt(hdc, 0, 0, width, height, hdcMem, 0, 0, SRCCOPY);
+		SelectObject(hdcMem, hOld);
+		DeleteObject(hbmMem);
+		DeleteDC(hdcMem);
 
 		EndPaint(hWnd, &ps);
 	}
