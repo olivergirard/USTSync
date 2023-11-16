@@ -476,4 +476,8 @@ Modulation=0
 Envelope=0,53.6,53.2,0,100,100,0
 PBW=50
 PBS=-25
+[#0051]
+Length=480
+Lyric=
+NoteNum=60
 [#TRACKEND]

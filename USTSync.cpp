@@ -29,13 +29,15 @@ int leftY = 0;
 int rightX = 0;
 int rightY = 0;
 
+int scrollX = 0;
+int width = 0;
+
 bool isRangeSelected = false;
 
 RECT selectedRange = { 0, 0, 0, 0 };
 RECT previousRange = { 0, 0, 0, 0 };
 
 std::vector<std::tuple<RECT, std::wstring>> noteRectangles;
-
 
 // Forward declarations of functions included in this code module:
 ATOM                MyRegisterClass(HINSTANCE hInstance);
@@ -105,8 +107,11 @@ void DrawNotes(HWND hWnd, HDC hdc) {
 
 	noteRectangles.clear();
 
+	int temp = 0;
+
 	for (Note note : notes) {
 
+		temp += (note.length / 7) + 1;
 		rectangle.right += note.length / 7;
 
 		Rectangle(hdc, rectangle.left, rectangle.top, rectangle.right, rectangle.bottom);
@@ -117,6 +122,8 @@ void DrawNotes(HWND hWnd, HDC hdc) {
 
 		rectangle.left = rectangle.right + 1;
 	}
+
+	width = temp;
 }
 
 void DrawRange(HWND hWnd, HDC hdc) {
@@ -127,12 +134,38 @@ void DrawRange(HWND hWnd, HDC hdc) {
 	Rectangle(hdc, selectedRange.left, selectedRange.top, selectedRange.right, selectedRange.bottom);
 }
 
-bool Overlap(RECT RectA, RECT RectB) {
+bool Overlap(RECT noteRectangle, RECT selectedRange) {
 
-	bool widthIsPositive = min(RectA.right, RectB.right) > max(RectA.left, RectB.left);
-	bool heightIsPositive = min(RectA.bottom, RectB.bottom) > max(RectA.top, RectB.top);
+	int left = selectedRange.left;
+	int right = selectedRange.right;
+	int top = selectedRange.top;
+	int bottom = selectedRange.bottom;
 
-	return (widthIsPositive && heightIsPositive);
+	if (selectedRange.top > selectedRange.bottom && selectedRange.left > selectedRange.right) {
+		/* If dragging from the lower-right corner... */
+		left = selectedRange.right;
+		right = selectedRange.left;
+		bottom = selectedRange.top;
+		top = selectedRange.bottom;
+
+	} else if (selectedRange.right < selectedRange.left) {
+		/* If dragging from the upper-right corner... */
+		left = selectedRange.right;
+		right = selectedRange.left;
+	}
+	else if (selectedRange.bottom < selectedRange.top) {
+		/* If dragging from the lower-left corner... */
+		bottom = selectedRange.top;
+		top = selectedRange.bottom;
+	}
+	
+	/* Otherwise, dragging from the upper-left corner. */
+	if ((min(noteRectangle.right, right) > max(noteRectangle.left, left)) && (min(noteRectangle.bottom, bottom) > max(noteRectangle.top, top)) == true) {
+		return true;
+	}
+	else {
+		return false;
+	}
 }
 
 void SelectRange(HWND hWnd, HDC hdc, RECT selectedRange) {
@@ -143,7 +176,7 @@ void SelectRange(HWND hWnd, HDC hdc, RECT selectedRange) {
 
 		if (Overlap(noteRectangle, selectedRange) == true) {
 
-			HBRUSH hbrush = CreateSolidBrush(RGB(0, 0, 255));
+			HBRUSH hbrush = CreateSolidBrush(RGB(100, 234, 255));
 			FillRect(hdc, &noteRectangle, hbrush);
 
 			SetDCPenColor(hdc, RGB(0, 0, 0));
@@ -199,7 +232,7 @@ BOOL InitInstance(HINSTANCE hInstance, int nCmdShow)
 {
 	hInst = hInstance; // Store instance handle in our global variable
 
-	HWND hWnd = CreateWindowW(szWindowClass, szTitle, WS_OVERLAPPEDWINDOW,
+	HWND hWnd = CreateWindowW(szWindowClass, szTitle, WS_OVERLAPPEDWINDOW | SB_HORZ,
 		CW_USEDEFAULT, 0, CW_USEDEFAULT, 0, nullptr, nullptr, hInstance, nullptr);
 
 	if (!hWnd)
@@ -227,8 +260,41 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam)
 {
 	switch (message)
 	{
-	case WM_ERASEBKGND:
+	case WM_ERASEBKGND: 
+	{
 		return 1;
+	}
+	case WM_RBUTTONDOWN: {
+		/* TODO: right-click menu */
+
+		break;
+	}
+	case WM_HSCROLL: {
+
+		/* TODO: if scroll touches window border(-ish area) scroll more so more notes can be selected. */
+		
+		switch (LOWORD(wParam))
+		{
+		case SB_PAGELEFT:
+			scrollX -= 10;
+			break;
+		case SB_PAGERIGHT:
+			scrollX += 10;
+			break;
+		case SB_LINELEFT:
+			scrollX -= 5;
+			break;
+		case SB_LINERIGHT:
+			scrollX += 5;
+			break;
+		case SB_THUMBPOSITION:
+			scrollX = HIWORD(wParam);
+			break;
+		}
+
+		InvalidateRect(hWnd, NULL, false);
+		break;
+	}
 	case WM_LBUTTONDOWN:
 	{
 		if (UTAURead::WasFileRead() == true) {
@@ -310,17 +376,35 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam)
 		HBITMAP hbmMem;
 		HANDLE hOld;
 
+		RECT rc = { 0 };
+		GetClientRect(hWnd, &rc);
+		SCROLLINFO si = { 0 };
+		si.cbSize = sizeof(SCROLLINFO);
+		si.fMask = SIF_ALL;
+		si.nMin = 0;
+		si.nMax = width;
+		si.nPage = (rc.right - rc.left);
+		si.nPos = scrollX;
+		si.nTrackPos = 0;
+		SetScrollInfo(hWnd, SB_HORZ, &si, true);
+
 		hdc = BeginPaint(hWnd, &ps);
 
 		hdcMem = CreateCompatibleDC(hdc);
 
 		RECT rect;
 		GetWindowRect(hWnd, &rect);
-		int width = rect.right - rect.left;
 		int height = rect.bottom - rect.top;
 
 		hbmMem = CreateCompatibleBitmap(hdc, width, height);
 		hOld = SelectObject(hdcMem, hbmMem);
+
+		rect.left = 0;
+		rect.top = 0;
+		rect.right = width;
+		HBRUSH bckgrnd_brush = CreateSolidBrush(RGB(255, 255,255));
+		FillRect(hdcMem, &rect, bckgrnd_brush);
+		DeleteObject(bckgrnd_brush);
 		
 		if ((UTAURead::WasFileRead() == true)) {
 			DrawNotes(hWnd, hdcMem);
@@ -342,7 +426,7 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam)
 			SelectRange(hWnd, hdcMem, selectedRange);
 		}
 
-		BitBlt(hdc, 0, 0, width, height, hdcMem, 0, 0, SRCCOPY);
+		BitBlt(hdc, 0, 0, width, height, hdcMem, scrollX, 0, SRCCOPY);
 		SelectObject(hdcMem, hOld);
 		DeleteObject(hbmMem);
 		DeleteDC(hdcMem);
