@@ -24,25 +24,39 @@ WCHAR szTitle[MAX_LOADSTRING];                  // The title bar text
 WCHAR szWindowClass[MAX_LOADSTRING];            // the main window class name
 
 /* My global variables. */
-int leftX = 0;
-int leftY = 0;
-int rightX = 0;
-int rightY = 0;
+
+/* Used for range selection. */
+int rangeLeft = 0;
+int rangeTop = 0;
+int rangeRight = 0;
+int rangeBottom = 0;
 
 int scrollX = 0;
 int scrollWidth = 0;
 
+/* Used for left-side mouse clicking. */
 int mouseX = 0;
 int mouseY = 0;
+
+/* Used for maintaining the position of the right-click menu. */
+int menuMouseX = 0;
+int menuMouseY = 0;
 
 int windowWidth = 1000;
 int windowHeight = 550;
 
 bool isRangeSelected = false;
-bool rightClickMenu = false;
+bool openRightClickMenu = false;
+bool openTranslationMenu = false;
+
+bool appear = false;
 
 RECT selectedRange = { 0, 0, 0, 0 };
 RECT previousRange = { 0, 0, 0, 0 };
+
+/* Vectors containing rectangle buttons representing effects. */
+std::vector<RECT> rightClickMenu;
+std::vector<RECT> translationMenu;
 
 std::vector<std::tuple<RECT, std::wstring>> noteRectangles;
 
@@ -199,10 +213,104 @@ void SelectRange(HWND hWnd, HDC hdc) {
 
 void DrawRightClickMenu(HWND hWnd, HDC hdc) {
 
+	if ((menuMouseX != 0) && (menuMouseY != 0)) {
+		mouseX = menuMouseX;
+		mouseY = menuMouseY;
+	}
+
 	SetDCPenColor(hdc, RGB(0, 0, 0));
+	rightClickMenu.clear();
+
+	/* Background rectangle. */
+	RECT background = { mouseX, mouseY, mouseX + 150, mouseY + 203 };
+	HBRUSH grayBrush = CreateSolidBrush(RGB(125, 125, 125));
+	FillRect(hdc, &background, grayBrush);
+
+	/* Category rectangles and their labels. */
+	SetDCPenColor(hdc, RGB(0, 0, 0));
+	SelectObject(hdc, GetStockObject(NULL_BRUSH));
 	SetBkMode(hdc, TRANSPARENT);
 
-	Rectangle(hdc, mouseX, mouseY, mouseX + 100, mouseY + 100);
+	RECT translations = { mouseX, mouseY, mouseX + 150, mouseY + 50 };
+	Rectangle(hdc, mouseX, mouseY, mouseX + 150, mouseY + 50);
+	DrawText(hdc, L"   Translations", -1, &translations, DT_LEFT | DT_SINGLELINE | DT_VCENTER);
+	rightClickMenu.push_back(translations);
+
+	RECT rotations = { mouseX, mouseY + 51, mouseX + 150, mouseY + 101 };
+	Rectangle(hdc, mouseX, mouseY + 51, mouseX + 150, mouseY + 101);
+	DrawText(hdc, L"   Rotations", -1, &rotations, DT_LEFT | DT_SINGLELINE | DT_VCENTER);
+	rightClickMenu.push_back(rotations);
+
+	RECT opacity = { mouseX, mouseY + 102, mouseX + 150, mouseY + 152 };
+	Rectangle(hdc, mouseX, mouseY + 102, mouseX + 150, mouseY + 152);
+	DrawText(hdc, L"   Opacity", -1, &opacity, DT_LEFT | DT_SINGLELINE | DT_VCENTER);
+	rightClickMenu.push_back(opacity);
+
+	RECT color = { mouseX, mouseY + 153, mouseX + 150, mouseY + 203 };
+	Rectangle(hdc, mouseX, mouseY + 153, mouseX + 150, mouseY + 203);
+	DrawText(hdc, L"   Color", -1, &color, DT_LEFT | DT_SINGLELINE | DT_VCENTER);
+	rightClickMenu.push_back(color);
+
+	if ((menuMouseX == 0) && (menuMouseY == 0)) {
+		menuMouseX = mouseX;
+		menuMouseY = mouseY;
+	}
+}
+
+bool MouseInRectangle(RECT menuRectangle) {
+
+	if ((mouseX > menuRectangle.left) && (mouseX < menuRectangle.right) && (mouseY > menuRectangle.top) && (mouseY < menuRectangle.bottom)) {
+		return true;
+	}
+	else {
+		return false;
+	}
+}
+
+void DrawTranslationMenu(HWND hWnd, HDC hdc) {
+
+	mouseX = menuMouseX;
+	mouseY = menuMouseY;
+
+	SetDCPenColor(hdc, RGB(0, 0, 0));
+	translationMenu.clear();
+
+	/* Background rectangle. */
+	RECT background = { mouseX + 150, mouseY, mouseX + 300, mouseY + 51 };
+	HBRUSH grayBrush = CreateSolidBrush(RGB(175, 175, 175));
+	FillRect(hdc, &background, grayBrush);
+
+	/* Translation rectangles and their labels. */
+	SetDCPenColor(hdc, RGB(0, 0, 0));
+	SelectObject(hdc, GetStockObject(NULL_BRUSH));
+	SetBkMode(hdc, TRANSPARENT);
+
+	RECT appear = { mouseX + 151, mouseY, mouseX + 300, mouseY + 50 };
+	Rectangle(hdc, mouseX + 151, mouseY, mouseX + 300, mouseY + 50);
+	DrawText(hdc, L"   Appear", -1, &appear, DT_LEFT | DT_SINGLELINE | DT_VCENTER);
+	translationMenu.push_back(appear);
+}
+
+void AddAppear(HWND hWnd, HDC hdc) {
+
+	/* Coloring the range to signify an effect change. */
+	for (std::tuple<RECT, std::wstring> tuple : noteRectangles) {
+
+		RECT noteRectangle = std::get<0>(tuple);
+
+		if (Overlap(noteRectangle, selectedRange) == true) {
+
+			HBRUSH hbrush = CreateSolidBrush(RGB(0, 255, 0));
+			FillRect(hdc, &noteRectangle, hbrush);
+
+			SetDCPenColor(hdc, RGB(0, 0, 0));
+			SelectObject(hdc, GetStockObject(NULL_BRUSH));
+			Rectangle(hdc, noteRectangle.left, noteRectangle.top, noteRectangle.right, noteRectangle.bottom);
+
+			SetBkMode(hdc, TRANSPARENT);
+			DrawText(hdc, LPCWSTR(std::get<1>(tuple).c_str()), -1, &noteRectangle, DT_CENTER | DT_SINGLELINE | DT_VCENTER);
+		}
+	}
 }
 
 /* End of my functions. */
@@ -281,17 +389,13 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam)
 	}
 	case WM_RBUTTONDOWN: {
 
-		/* TODO: right-click menu */
-
 		if (isRangeSelected == false) {
-			rightClickMenu = true;
-
+			openRightClickMenu = true;
 			mouseX = GET_X_LPARAM(lParam);
 			mouseY = GET_Y_LPARAM(lParam);
-
 		}
 		else {
-			rightClickMenu = false;
+			openRightClickMenu = false;
 		}
 
 		InvalidateRect(hWnd, NULL, false);
@@ -324,19 +428,83 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam)
 	}
 	case WM_LBUTTONDOWN:
 	{
+		int originalLeft = selectedRange.left;
+		int originalTop = selectedRange.top;
+
 		if (UTAURead::WasFileRead() == true) {
-			leftX = GET_X_LPARAM(lParam);
-			leftY = GET_Y_LPARAM(lParam);
-			selectedRange.left = leftX;
-			selectedRange.top = leftY;
+			rangeLeft = GET_X_LPARAM(lParam);
+			rangeTop = GET_Y_LPARAM(lParam);
+			selectedRange.left = rangeLeft;
+			selectedRange.top = rangeTop;
 
 			isRangeSelected = true;
 		}
 
-		if (rightClickMenu == true) {
+		if (openTranslationMenu == true) {
+
+			mouseX = GET_X_LPARAM(lParam);
+			mouseY = GET_Y_LPARAM(lParam);
+			RECT clickedRectangle = { 0 };
+
+			for (RECT menuRectangle : translationMenu) {
+
+				if (MouseInRectangle(menuRectangle) == true) {
+					clickedRectangle = menuRectangle;
+					break;
+				}
+			}
+
+			if ((clickedRectangle.left != 0) || (clickedRectangle.top != 0) || (clickedRectangle.right != 0) || (clickedRectangle.bottom != 0)) {
+
+				/* If the right-click menu was clicked inside, determine where it was clicked and open that corresponding submenu. */
+				selectedRange.left = originalLeft;
+				selectedRange.top = originalTop;
+
+				if ((clickedRectangle.left == translationMenu[0].left) && (clickedRectangle.top == translationMenu[0].top) && (clickedRectangle.right == translationMenu[0].right) && (clickedRectangle.bottom == translationMenu[0].bottom)) {
+					appear = true;
+				}
+			}
+			else {
+				openRightClickMenu = false;
+				openTranslationMenu = false;
+				appear = false;
+				selectedRange = { 0 };
+			}
 
 			InvalidateRect(hWnd, NULL, false);
-			rightClickMenu = false;
+		}
+		else if (openRightClickMenu == true) {
+
+			mouseX = GET_X_LPARAM(lParam);
+			mouseY = GET_Y_LPARAM(lParam);
+			RECT clickedRectangle = { 0 };
+
+			for (RECT menuRectangle : rightClickMenu) {
+				
+				if (MouseInRectangle(menuRectangle) == true) {
+					clickedRectangle = menuRectangle;
+					break;
+				}
+			}
+
+			if ((clickedRectangle.left != 0) || (clickedRectangle.top != 0) || (clickedRectangle.right != 0) || (clickedRectangle.bottom != 0)) {
+
+				/* If the right-click menu was clicked inside, determine where it was clicked and open that corresponding submenu. */
+				selectedRange.left = originalLeft;
+				selectedRange.top = originalTop;
+
+				if ((clickedRectangle.left == rightClickMenu[0].left) && (clickedRectangle.top == rightClickMenu[0].top) && (clickedRectangle.right == rightClickMenu[0].right) && (clickedRectangle.bottom == rightClickMenu[0].bottom)) {
+					openTranslationMenu = true;
+				}
+			}
+			else {
+				openRightClickMenu = false;
+				openTranslationMenu = false;
+				appear = false;
+				selectedRange = { 0 };
+			}
+
+			InvalidateRect(hWnd, NULL, false);
 		}
 
 		break;
@@ -344,16 +512,18 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam)
 	case WM_LBUTTONUP:
 	{
 		isRangeSelected = false;
-		InvalidateRect(hWnd, NULL, true);
+		menuMouseX = 0;
+		menuMouseY = 0;
+		InvalidateRect(hWnd, NULL, false);
 		break;
 	}
 	case WM_MOUSEMOVE:
 	{
 		if (isRangeSelected == true) {
-			rightX = GET_X_LPARAM(lParam);
-			rightY = GET_Y_LPARAM(lParam);
-			selectedRange.right = rightX;
-			selectedRange.bottom = rightY;
+			rangeRight = GET_X_LPARAM(lParam);
+			rangeBottom = GET_Y_LPARAM(lParam);
+			selectedRange.right = rangeRight;
+			selectedRange.bottom = rangeBottom;
 
 			InvalidateRect(hWnd, NULL, false);
 
@@ -401,49 +571,51 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam)
 	break;
 	case WM_PAINT:
 	{
-		/* TODO: insert paint stuff here. */
+		/* Variable declaration. */
 		HDC hdc;
 		PAINTSTRUCT ps;
-
 		HDC hdcMem;
 		HBITMAP hbmMem;
 		HANDLE hOld;
 
-		RECT rc = { 0 };
-		GetClientRect(hWnd, &rc);
+		/* Scroll bar. */
+		RECT clientRectangle = { 0 };
+		GetClientRect(hWnd, &clientRectangle);
 		SCROLLINFO si = { 0 };
 		si.cbSize = sizeof(SCROLLINFO);
 		si.fMask = SIF_ALL;
 		si.nMin = 0;
 		si.nMax = scrollWidth;
-		si.nPage = (rc.right - rc.left);
+		si.nPage = (clientRectangle.right - clientRectangle.left);
 		si.nPos = scrollX;
 		si.nTrackPos = 0;
 		SetScrollInfo(hWnd, SB_HORZ, &si, true);
 
+		/* Double-buffering. */
 		hdc = BeginPaint(hWnd, &ps);
-
 		hdcMem = CreateCompatibleDC(hdc);
 
-		RECT rect;
-		GetWindowRect(hWnd, &rect);
-		int height = rect.bottom - rect.top;
+		RECT windowRectangle;
+		GetWindowRect(hWnd, &windowRectangle);
+		int height = windowRectangle.bottom - windowRectangle.top;
 
 		hbmMem = CreateCompatibleBitmap(hdc, scrollWidth, height);
 		hOld = SelectObject(hdcMem, hbmMem);
 
-		rect.left = 0;
-		rect.top = 0;
-		rect.right = scrollWidth;
-		HBRUSH bckgrnd_brush = CreateSolidBrush(RGB(255, 255,255));
-		FillRect(hdcMem, &rect, bckgrnd_brush);
-		DeleteObject(bckgrnd_brush);
+		/* Solid, white background. */
+		windowRectangle.left = 0;
+		windowRectangle.top = 0;
+		windowRectangle.right = scrollWidth;
+		HBRUSH backgroundBrush = CreateSolidBrush(RGB(255, 255,255));
+		FillRect(hdcMem, &windowRectangle, backgroundBrush);
+		DeleteObject(backgroundBrush);
 		
-		if ((UTAURead::WasFileRead() == true)) {
+		/* Actual paint conditions. */
+		if (UTAURead::WasFileRead() == true) {
 			DrawNotes(hWnd, hdcMem);
 		}
 		
-		if (((rightX != 0) || (rightY != 0)) && (isRangeSelected == true)) {
+		if (((rangeRight != 0) || (rangeBottom != 0)) && (isRangeSelected == true)) {
 			previousRange = selectedRange;
 			DrawRange(hWnd, hdcMem);
 		}
@@ -451,18 +623,29 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam)
 		if ((isRangeSelected == false) && (rangeChecker(selectedRange) == true)) {
 			previousRange = { 0, 0, 0, 0 };
 
-			leftX = 0;
-			leftY = 0;
-			rightX = 0;
-			rightY = 0;
+			rangeLeft = 0;
+			rangeTop = 0;
+			rangeRight = 0;
+			rangeBottom = 0;
 
 			SelectRange(hWnd, hdcMem);
 		}
 
-		if (rightClickMenu == true) {
+		if (openRightClickMenu == true) {
 			DrawRightClickMenu(hWnd, hdcMem);
+
+			if (openTranslationMenu == true) {
+				DrawTranslationMenu(hWnd, hdcMem);
+
+				if (appear == true) {
+					AddAppear(hWnd, hdcMem);
+					DrawRightClickMenu(hWnd, hdcMem);
+					DrawTranslationMenu(hWnd, hdcMem);
+				}
+			}
 		}
 
+		/* Cleaning up double-buffering. */
 		BitBlt(hdc, 0, 0, scrollWidth, height, hdcMem, scrollX, 0, SRCCOPY);
 		SelectObject(hdcMem, hOld);
 		DeleteObject(hbmMem);
