@@ -30,9 +30,16 @@ int rightX = 0;
 int rightY = 0;
 
 int scrollX = 0;
-int width = 0;
+int scrollWidth = 0;
+
+int mouseX = 0;
+int mouseY = 0;
+
+int windowWidth = 1000;
+int windowHeight = 550;
 
 bool isRangeSelected = false;
+bool rightClickMenu = false;
 
 RECT selectedRange = { 0, 0, 0, 0 };
 RECT previousRange = { 0, 0, 0, 0 };
@@ -123,7 +130,7 @@ void DrawNotes(HWND hWnd, HDC hdc) {
 		rectangle.left = rectangle.right + 1;
 	}
 
-	width = temp;
+	scrollWidth = temp;
 }
 
 void DrawRange(HWND hWnd, HDC hdc) {
@@ -168,7 +175,7 @@ bool Overlap(RECT noteRectangle, RECT selectedRange) {
 	}
 }
 
-void SelectRange(HWND hWnd, HDC hdc, RECT selectedRange) {
+void SelectRange(HWND hWnd, HDC hdc) {
 
 	for (std::tuple<RECT, std::wstring> tuple : noteRectangles) {
 
@@ -188,6 +195,14 @@ void SelectRange(HWND hWnd, HDC hdc, RECT selectedRange) {
 
 		}
 	}
+}
+
+void DrawRightClickMenu(HWND hWnd, HDC hdc) {
+
+	SetDCPenColor(hdc, RGB(0, 0, 0));
+	SetBkMode(hdc, TRANSPARENT);
+
+	Rectangle(hdc, mouseX, mouseY, mouseX + 100, mouseY + 100);
 }
 
 /* End of my functions. */
@@ -233,7 +248,7 @@ BOOL InitInstance(HINSTANCE hInstance, int nCmdShow)
 	hInst = hInstance; // Store instance handle in our global variable
 
 	HWND hWnd = CreateWindowW(szWindowClass, szTitle, WS_OVERLAPPEDWINDOW | SB_HORZ,
-		CW_USEDEFAULT, 0, CW_USEDEFAULT, 0, nullptr, nullptr, hInstance, nullptr);
+		CW_USEDEFAULT, 0, windowWidth, windowHeight, nullptr, nullptr, hInstance, nullptr);
 
 	if (!hWnd)
 	{
@@ -265,13 +280,25 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam)
 		return 1;
 	}
 	case WM_RBUTTONDOWN: {
+
 		/* TODO: right-click menu */
+
+		if (isRangeSelected == false) {
+			rightClickMenu = true;
+
+			mouseX = GET_X_LPARAM(lParam);
+			mouseY = GET_Y_LPARAM(lParam);
+
+		}
+		else {
+			rightClickMenu = false;
+		}
+
+		InvalidateRect(hWnd, NULL, false);
 
 		break;
 	}
 	case WM_HSCROLL: {
-
-		/* TODO: if scroll touches window border(-ish area) scroll more so more notes can be selected. */
 		
 		switch (LOWORD(wParam))
 		{
@@ -304,6 +331,12 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam)
 			selectedRange.top = leftY;
 
 			isRangeSelected = true;
+		}
+
+		if (rightClickMenu == true) {
+
+			InvalidateRect(hWnd, NULL, false);
+			rightClickMenu = false;
 		}
 
 		break;
@@ -382,7 +415,7 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam)
 		si.cbSize = sizeof(SCROLLINFO);
 		si.fMask = SIF_ALL;
 		si.nMin = 0;
-		si.nMax = width;
+		si.nMax = scrollWidth;
 		si.nPage = (rc.right - rc.left);
 		si.nPos = scrollX;
 		si.nTrackPos = 0;
@@ -396,12 +429,12 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam)
 		GetWindowRect(hWnd, &rect);
 		int height = rect.bottom - rect.top;
 
-		hbmMem = CreateCompatibleBitmap(hdc, width, height);
+		hbmMem = CreateCompatibleBitmap(hdc, scrollWidth, height);
 		hOld = SelectObject(hdcMem, hbmMem);
 
 		rect.left = 0;
 		rect.top = 0;
-		rect.right = width;
+		rect.right = scrollWidth;
 		HBRUSH bckgrnd_brush = CreateSolidBrush(RGB(255, 255,255));
 		FillRect(hdcMem, &rect, bckgrnd_brush);
 		DeleteObject(bckgrnd_brush);
@@ -423,10 +456,14 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam)
 			rightX = 0;
 			rightY = 0;
 
-			SelectRange(hWnd, hdcMem, selectedRange);
+			SelectRange(hWnd, hdcMem);
 		}
 
-		BitBlt(hdc, 0, 0, width, height, hdcMem, scrollX, 0, SRCCOPY);
+		if (rightClickMenu == true) {
+			DrawRightClickMenu(hWnd, hdcMem);
+		}
+
+		BitBlt(hdc, 0, 0, scrollWidth, height, hdcMem, scrollX, 0, SRCCOPY);
 		SelectObject(hdcMem, hOld);
 		DeleteObject(hbmMem);
 		DeleteDC(hdcMem);
