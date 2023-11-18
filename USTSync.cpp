@@ -1,5 +1,3 @@
-// USTSync.cpp : Defines the entry point for the application.
-//
 #include <fstream>
 #include <windows.h>
 #include <commdlg.h>
@@ -38,18 +36,10 @@ int scrollWidth = 0;
 int mouseX = 0;
 int mouseY = 0;
 
-/* Used for maintaining the position of the right-click menu. */
-int menuMouseX = 0;
-int menuMouseY = 0;
-
 int windowWidth = 1000;
 int windowHeight = 550;
 
 bool isRangeSelected = false;
-bool openRightClickMenu = false;
-bool openTranslationMenu = false;
-
-bool appear = false;
 
 RECT selectedRange = { 0, 0, 0, 0 };
 RECT previousRange = { 0, 0, 0, 0 };
@@ -211,52 +201,6 @@ void SelectRange(HWND hWnd, HDC hdc) {
 	}
 }
 
-void DrawRightClickMenu(HWND hWnd, HDC hdc) {
-
-	if ((menuMouseX != 0) && (menuMouseY != 0)) {
-		mouseX = menuMouseX;
-		mouseY = menuMouseY;
-	}
-
-	SetDCPenColor(hdc, RGB(0, 0, 0));
-	rightClickMenu.clear();
-
-	/* Background rectangle. */
-	RECT background = { mouseX, mouseY, mouseX + 150, mouseY + 203 };
-	HBRUSH grayBrush = CreateSolidBrush(RGB(125, 125, 125));
-	FillRect(hdc, &background, grayBrush);
-
-	/* Category rectangles and their labels. */
-	SetDCPenColor(hdc, RGB(0, 0, 0));
-	SelectObject(hdc, GetStockObject(NULL_BRUSH));
-	SetBkMode(hdc, TRANSPARENT);
-
-	RECT translations = { mouseX, mouseY, mouseX + 150, mouseY + 50 };
-	Rectangle(hdc, mouseX, mouseY, mouseX + 150, mouseY + 50);
-	DrawText(hdc, L"   Translations", -1, &translations, DT_LEFT | DT_SINGLELINE | DT_VCENTER);
-	rightClickMenu.push_back(translations);
-
-	RECT rotations = { mouseX, mouseY + 51, mouseX + 150, mouseY + 101 };
-	Rectangle(hdc, mouseX, mouseY + 51, mouseX + 150, mouseY + 101);
-	DrawText(hdc, L"   Rotations", -1, &rotations, DT_LEFT | DT_SINGLELINE | DT_VCENTER);
-	rightClickMenu.push_back(rotations);
-
-	RECT opacity = { mouseX, mouseY + 102, mouseX + 150, mouseY + 152 };
-	Rectangle(hdc, mouseX, mouseY + 102, mouseX + 150, mouseY + 152);
-	DrawText(hdc, L"   Opacity", -1, &opacity, DT_LEFT | DT_SINGLELINE | DT_VCENTER);
-	rightClickMenu.push_back(opacity);
-
-	RECT color = { mouseX, mouseY + 153, mouseX + 150, mouseY + 203 };
-	Rectangle(hdc, mouseX, mouseY + 153, mouseX + 150, mouseY + 203);
-	DrawText(hdc, L"   Color", -1, &color, DT_LEFT | DT_SINGLELINE | DT_VCENTER);
-	rightClickMenu.push_back(color);
-
-	if ((menuMouseX == 0) && (menuMouseY == 0)) {
-		menuMouseX = mouseX;
-		menuMouseY = mouseY;
-	}
-}
-
 bool MouseInRectangle(RECT menuRectangle) {
 
 	if ((mouseX > menuRectangle.left) && (mouseX < menuRectangle.right) && (mouseY > menuRectangle.top) && (mouseY < menuRectangle.bottom)) {
@@ -265,30 +209,6 @@ bool MouseInRectangle(RECT menuRectangle) {
 	else {
 		return false;
 	}
-}
-
-void DrawTranslationMenu(HWND hWnd, HDC hdc) {
-
-	mouseX = menuMouseX;
-	mouseY = menuMouseY;
-
-	SetDCPenColor(hdc, RGB(0, 0, 0));
-	translationMenu.clear();
-
-	/* Background rectangle. */
-	RECT background = { mouseX + 150, mouseY, mouseX + 300, mouseY + 51 };
-	HBRUSH grayBrush = CreateSolidBrush(RGB(175, 175, 175));
-	FillRect(hdc, &background, grayBrush);
-
-	/* Translation rectangles and their labels. */
-	SetDCPenColor(hdc, RGB(0, 0, 0));
-	SelectObject(hdc, GetStockObject(NULL_BRUSH));
-	SetBkMode(hdc, TRANSPARENT);
-
-	RECT appear = { mouseX + 151, mouseY, mouseX + 300, mouseY + 50 };
-	Rectangle(hdc, mouseX + 151, mouseY, mouseX + 300, mouseY + 50);
-	DrawText(hdc, L"   Appear", -1, &appear, DT_LEFT | DT_SINGLELINE | DT_VCENTER);
-	translationMenu.push_back(appear);
 }
 
 void AddAppear(HWND hWnd, HDC hdc) {
@@ -390,12 +310,8 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam)
 	case WM_RBUTTONDOWN: {
 
 		if (isRangeSelected == false) {
-			openRightClickMenu = true;
 			mouseX = GET_X_LPARAM(lParam);
 			mouseY = GET_Y_LPARAM(lParam);
-		}
-		else {
-			openRightClickMenu = false;
 		}
 
 		InvalidateRect(hWnd, NULL, false);
@@ -428,10 +344,10 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam)
 	}
 	case WM_LBUTTONDOWN:
 	{
-		int originalLeft = selectedRange.left;
-		int originalTop = selectedRange.top;
 
 		if (UTAURead::WasFileRead() == true) {
+
+			selectedRange = { 0 };
 			rangeLeft = GET_X_LPARAM(lParam);
 			rangeTop = GET_Y_LPARAM(lParam);
 			selectedRange.left = rangeLeft;
@@ -440,80 +356,12 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam)
 			isRangeSelected = true;
 		}
 
-		if (openTranslationMenu == true) {
-
-			mouseX = GET_X_LPARAM(lParam);
-			mouseY = GET_Y_LPARAM(lParam);
-			RECT clickedRectangle = { 0 };
-
-			for (RECT menuRectangle : translationMenu) {
-
-				if (MouseInRectangle(menuRectangle) == true) {
-					clickedRectangle = menuRectangle;
-					break;
-				}
-			}
-
-			if ((clickedRectangle.left != 0) || (clickedRectangle.top != 0) || (clickedRectangle.right != 0) || (clickedRectangle.bottom != 0)) {
-
-				/* If the right-click menu was clicked inside, determine where it was clicked and open that corresponding submenu. */
-				selectedRange.left = originalLeft;
-				selectedRange.top = originalTop;
-
-				if ((clickedRectangle.left == translationMenu[0].left) && (clickedRectangle.top == translationMenu[0].top) && (clickedRectangle.right == translationMenu[0].right) && (clickedRectangle.bottom == translationMenu[0].bottom)) {
-					appear = true;
-				}
-			}
-			else {
-				openRightClickMenu = false;
-				openTranslationMenu = false;
-				appear = false;
-				selectedRange = { 0 };
-			}
-
-			InvalidateRect(hWnd, NULL, false);
-		}
-		else if (openRightClickMenu == true) {
-
-			mouseX = GET_X_LPARAM(lParam);
-			mouseY = GET_Y_LPARAM(lParam);
-			RECT clickedRectangle = { 0 };
-
-			for (RECT menuRectangle : rightClickMenu) {
-				
-				if (MouseInRectangle(menuRectangle) == true) {
-					clickedRectangle = menuRectangle;
-					break;
-				}
-			}
-
-			if ((clickedRectangle.left != 0) || (clickedRectangle.top != 0) || (clickedRectangle.right != 0) || (clickedRectangle.bottom != 0)) {
-
-				/* If the right-click menu was clicked inside, determine where it was clicked and open that corresponding submenu. */
-				selectedRange.left = originalLeft;
-				selectedRange.top = originalTop;
-
-				if ((clickedRectangle.left == rightClickMenu[0].left) && (clickedRectangle.top == rightClickMenu[0].top) && (clickedRectangle.right == rightClickMenu[0].right) && (clickedRectangle.bottom == rightClickMenu[0].bottom)) {
-					openTranslationMenu = true;
-				}
-			}
-			else {
-				openRightClickMenu = false;
-				openTranslationMenu = false;
-				appear = false;
-				selectedRange = { 0 };
-			}
-
-			InvalidateRect(hWnd, NULL, false);
-		}
-
 		break;
 	}
 	case WM_LBUTTONUP:
 	{
 		isRangeSelected = false;
-		menuMouseX = 0;
-		menuMouseY = 0;
+
 		InvalidateRect(hWnd, NULL, false);
 		break;
 	}
@@ -542,7 +390,6 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam)
 		{
 		case IDM_FILE:
 		{
-
 			WCHAR buffer[MAX_PATH];
 			OPENFILENAME ofn = {};
 			ofn.lStructSize = sizeof(ofn);
@@ -554,7 +401,7 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam)
 				UTAURead::AnalyzeNotes(ofn.lpstrFile);
 			}
 
-			InvalidateRect(hWnd, NULL, false);
+			InvalidateRect(hWnd, NULL, true);
 
 			break;
 		}
@@ -629,20 +476,6 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam)
 			rangeBottom = 0;
 
 			SelectRange(hWnd, hdcMem);
-		}
-
-		if (openRightClickMenu == true) {
-			DrawRightClickMenu(hWnd, hdcMem);
-
-			if (openTranslationMenu == true) {
-				DrawTranslationMenu(hWnd, hdcMem);
-
-				if (appear == true) {
-					AddAppear(hWnd, hdcMem);
-					DrawRightClickMenu(hWnd, hdcMem);
-					DrawTranslationMenu(hWnd, hdcMem);
-				}
-			}
 		}
 
 		/* Cleaning up double-buffering. */
