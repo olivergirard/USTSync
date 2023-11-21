@@ -38,23 +38,25 @@ int mouseY = 0;
 
 int windowWidth = 1000;
 int windowHeight = 550;
+int windowX = 0;
+int windowY = 0;
 
 bool isRangeSelected = false;
+bool initialRead = false;
 
 RECT selectedRange = { 0, 0, 0, 0 };
 RECT previousRange = { 0, 0, 0, 0 };
 
-/* Vectors containing rectangle buttons representing effects. */
-std::vector<RECT> rightClickMenu;
-std::vector<RECT> translationMenu;
+COLORREF colorToChange = NULL;
 
-std::vector<std::tuple<RECT, std::wstring>> noteRectangles;
+std::vector<std::tuple<RECT, std::wstring, double, COLORREF>> noteRectangles;
 
 // Forward declarations of functions included in this code module:
 ATOM                MyRegisterClass(HINSTANCE hInstance);
 BOOL                InitInstance(HINSTANCE, int);
 LRESULT CALLBACK    WndProc(HWND, UINT, WPARAM, LPARAM);
-INT_PTR CALLBACK    About(HWND, UINT, WPARAM, LPARAM);
+LRESULT CALLBACK    VideoProc(HWND, UINT, WPARAM, LPARAM);
+INT_PTR CALLBACK    ErrorBox(HWND, UINT, WPARAM, LPARAM);
 
 int APIENTRY wWinMain(_In_ HINSTANCE hInstance,
 	_In_opt_ HINSTANCE hPrevInstance,
@@ -94,7 +96,21 @@ int APIENTRY wWinMain(_In_ HINSTANCE hInstance,
 
 /* My functions. */
 
-bool rangeChecker(RECT rectangle) {
+bool AllNotesEffected() {
+
+	bool allNotes = true;
+
+	for (std::tuple<RECT, std::wstring, double, COLORREF> tuple : noteRectangles) {
+		if (std::get<3>(tuple) == RGB(255, 255, 255)) {
+			allNotes = false;
+			break;
+		}
+	}
+
+	return allNotes;
+}
+
+bool RangeChecker(RECT rectangle) {
 
 	if ((rectangle.left == 0) && (rectangle.right == 0) && (rectangle.top == 0) && (rectangle.bottom == 0)) {
 		return false;
@@ -116,31 +132,49 @@ void DrawNotes(HWND hWnd, HDC hdc) {
 
 	SetDCPenColor(hdc, RGB(0, 0, 0));
 
-	noteRectangles.clear();
-
 	int temp = 0;
 
-	for (Note note : notes) {
+	if (initialRead == false) {
+		for (Note note : notes) {
 
-		temp += (note.length / 7) + 1;
-		rectangle.right += note.length / 7;
+			temp += (note.length / 7) + 1;
+			rectangle.right += note.length / 7;
 
-		Rectangle(hdc, rectangle.left, rectangle.top, rectangle.right, rectangle.bottom);
-		DrawText(hdc, LPCWSTR(note.lyric.c_str()), -1, &rectangle, DT_CENTER | DT_SINGLELINE | DT_VCENTER);
+			Rectangle(hdc, rectangle.left, rectangle.top, rectangle.right, rectangle.bottom);
+			DrawText(hdc, LPCWSTR(note.lyric.c_str()), -1, &rectangle, DT_CENTER | DT_SINGLELINE | DT_VCENTER);
 
-		std::tuple<RECT, std::wstring> data = std::make_tuple(rectangle, note.lyric);
-		noteRectangles.push_back(data);
+			std::tuple<RECT, std::wstring, double, COLORREF> data = std::make_tuple(rectangle, note.lyric, note.length, RGB(255, 255, 255));
+			noteRectangles.push_back(data);
 
-		rectangle.left = rectangle.right + 1;
+			rectangle.left = rectangle.right + 1;
+		}
+
+		scrollWidth = temp;
 	}
+	else {
 
-	scrollWidth = temp;
+		for (std::tuple<RECT, std::wstring, double, COLORREF> tuple : noteRectangles) {
+
+			RECT noteRectangle = std::get<0>(tuple);
+
+			HBRUSH hbrush = CreateSolidBrush(std::get<3>(tuple));
+			FillRect(hdc, &noteRectangle, hbrush);
+
+			SetDCPenColor(hdc, RGB(0, 0, 0));
+			SelectObject(hdc, GetStockObject(NULL_BRUSH));
+			Rectangle(hdc, noteRectangle.left, noteRectangle.top, noteRectangle.right, noteRectangle.bottom);
+
+			SetBkMode(hdc, TRANSPARENT);
+			DrawText(hdc, LPCWSTR(std::get<1>(tuple).c_str()), -1, &noteRectangle, DT_CENTER | DT_SINGLELINE | DT_VCENTER);
+
+		}
+	}
 }
 
 void DrawRange(HWND hWnd, HDC hdc) {
 
 	SetDCPenColor(hdc, RGB(0, 0, 0));
-	SetBkMode(hdc, TRANSPARENT);
+	SetBkMode(hdc, OPAQUE);
 
 	Rectangle(hdc, selectedRange.left, selectedRange.top, selectedRange.right, selectedRange.bottom);
 }
@@ -181,7 +215,7 @@ bool Overlap(RECT noteRectangle, RECT selectedRange) {
 
 void SelectRange(HWND hWnd, HDC hdc) {
 
-	for (std::tuple<RECT, std::wstring> tuple : noteRectangles) {
+	for (std::tuple<RECT, std::wstring, double, COLORREF> tuple : noteRectangles) {
 
 		RECT noteRectangle = std::get<0>(tuple);
 
@@ -211,25 +245,22 @@ bool MouseInRectangle(RECT menuRectangle) {
 	}
 }
 
-void AddAppear(HWND hWnd, HDC hdc) {
+void AddEffect(HWND hWnd, COLORREF colorToChange) {
 
-	/* Coloring the range to signify an effect change. */
-	for (std::tuple<RECT, std::wstring> tuple : noteRectangles) {
+	/* Adding an effect to the range of notes. */
+	int index = 0;
+
+	for (std::tuple<RECT, std::wstring, double, COLORREF> tuple : noteRectangles) {
 
 		RECT noteRectangle = std::get<0>(tuple);
 
 		if (Overlap(noteRectangle, selectedRange) == true) {
 
-			HBRUSH hbrush = CreateSolidBrush(RGB(0, 255, 0));
-			FillRect(hdc, &noteRectangle, hbrush);
-
-			SetDCPenColor(hdc, RGB(0, 0, 0));
-			SelectObject(hdc, GetStockObject(NULL_BRUSH));
-			Rectangle(hdc, noteRectangle.left, noteRectangle.top, noteRectangle.right, noteRectangle.bottom);
-
-			SetBkMode(hdc, TRANSPARENT);
-			DrawText(hdc, LPCWSTR(std::get<1>(tuple).c_str()), -1, &noteRectangle, DT_CENTER | DT_SINGLELINE | DT_VCENTER);
+			std::tuple<RECT, std::wstring, double, COLORREF> updatedTuple = { std::get<0>(tuple) , std::get<1>(tuple), std::get<2>(tuple), colorToChange};
+			noteRectangles[index] = updatedTuple;
 		}
+
+		index++;
 	}
 }
 
@@ -275,8 +306,14 @@ BOOL InitInstance(HINSTANCE hInstance, int nCmdShow)
 {
 	hInst = hInstance; // Store instance handle in our global variable
 
+	RECT desktop;
+	const HWND hDesktop = GetDesktopWindow();
+	GetWindowRect(hDesktop, &desktop);
+	windowX = desktop.right / 4;
+	windowY = desktop.bottom / 4;
+
 	HWND hWnd = CreateWindowW(szWindowClass, szTitle, WS_OVERLAPPEDWINDOW | SB_HORZ,
-		CW_USEDEFAULT, 0, windowWidth, windowHeight, nullptr, nullptr, hInstance, nullptr);
+		windowX, windowY, windowWidth, windowHeight, nullptr, nullptr, hInstance, nullptr);
 
 	if (!hWnd)
 	{
@@ -388,12 +425,17 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam)
 		// Parse the menu selections:
 		switch (wmId)
 		{
+		case ID_NOPERSIST_CENTERED: {
+			
+			colorToChange = RGB(0, 255, 0);
+			AddEffect(hWnd, colorToChange);
+			break;
+		}
 		case IDM_FILE:
 		{
 			WCHAR buffer[MAX_PATH];
 			OPENFILENAME ofn = {};
 			ofn.lStructSize = sizeof(ofn);
-			//ofn.hwndOwner = ...;
 			ofn.lpstrFilter = TEXT("*.UST\0");
 			ofn.lpstrFile = buffer, ofn.nMaxFile = MAX_PATH, * buffer = '\0';
 			ofn.Flags = OFN_EXPLORER | OFN_ENABLESIZING | OFN_HIDEREADONLY | OFN_PATHMUSTEXIST | OFN_FILEMUSTEXIST;
@@ -401,19 +443,43 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam)
 				UTAURead::AnalyzeNotes(ofn.lpstrFile);
 			}
 
-			InvalidateRect(hWnd, NULL, true);
-
 			break;
 		}
-		case IDM_ABOUT:
-			DialogBox(hInst, MAKEINTRESOURCE(IDD_ABOUTBOX), hWnd, About);
-			break;
-		case IDM_EXIT:
-			DestroyWindow(hWnd);
+		case IDM_RENDER:
+
+			if (AllNotesEffected() == true) {
+
+				WNDCLASS cldclass;
+				cldclass.style = CS_HREDRAW | CS_VREDRAW;
+				cldclass.cbClsExtra = 0;
+				cldclass.cbWndExtra = 0;
+				cldclass.lpfnWndProc = VideoProc;
+				cldclass.hInstance = hInst;
+				cldclass.hIcon = LoadIcon(NULL, IDI_APPLICATION);
+				cldclass.hCursor = LoadCursor(NULL, IDC_ARROW);
+				cldclass.hbrBackground = (HBRUSH)GetStockObject(WHITE_BRUSH);
+				cldclass.lpszMenuName = NULL;
+				cldclass.lpszClassName = L"VideoWindow";
+
+				RegisterClass(&cldclass);
+
+				HMENU hMenu = LoadMenu(NULL, MAKEINTRESOURCE(IDC_VIDEOWINDOW));
+				HWND videoWindow = CreateWindow(L"VideoWindow", NULL, WS_VISIBLE | WS_OVERLAPPEDWINDOW, windowX, windowY, windowWidth, windowHeight, hWnd, hMenu, hInst, NULL);
+				ShowWindow(videoWindow, 5);
+				UpdateWindow(videoWindow);
+
+			}
+			else {
+				DialogBox(hInst, MAKEINTRESOURCE(IDD_RENDERFAIL), hWnd, ErrorBox);
+			}
+			
 			break;
 		default:
 			return DefWindowProc(hWnd, message, wParam, lParam);
 		}
+
+		InvalidateRect(hWnd, NULL, true);
+		RedrawWindow(hWnd, NULL, NULL, RDW_INVALIDATE | RDW_ALLCHILDREN | RDW_UPDATENOW);
 	}
 	break;
 	case WM_PAINT:
@@ -460,6 +526,7 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam)
 		/* Actual paint conditions. */
 		if (UTAURead::WasFileRead() == true) {
 			DrawNotes(hWnd, hdcMem);
+			initialRead = true;
 		}
 		
 		if (((rangeRight != 0) || (rangeBottom != 0)) && (isRangeSelected == true)) {
@@ -467,7 +534,7 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam)
 			DrawRange(hWnd, hdcMem);
 		}
 
-		if ((isRangeSelected == false) && (rangeChecker(selectedRange) == true)) {
+		if ((isRangeSelected == false) && (RangeChecker(selectedRange) == true)) {
 			previousRange = { 0, 0, 0, 0 };
 
 			rangeLeft = 0;
@@ -496,8 +563,61 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam)
 	return 0;
 }
 
+
+LRESULT CALLBACK VideoProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam) {
+
+	switch (message)
+	{
+	case WM_CREATE: {
+		// ?
+		break;
+	}
+	case WM_PAINT: {
+
+		/* Variable declaration. */
+		HDC hdc;
+		PAINTSTRUCT ps;
+		HDC hdcMem;
+		HBITMAP hbmMem;
+		HANDLE hOld;
+
+		/* Double-buffering. */
+		hdc = BeginPaint(hWnd, &ps);
+		hdcMem = CreateCompatibleDC(hdc);
+
+		RECT windowRectangle;
+		GetWindowRect(hWnd, &windowRectangle);
+
+		hbmMem = CreateCompatibleBitmap(hdc, windowWidth, windowHeight);
+		hOld = SelectObject(hdcMem, hbmMem);
+
+		/* Solid, white background. */
+		windowRectangle.left = 0;
+		windowRectangle.top = 0;
+		windowRectangle.right = windowWidth;
+		windowRectangle.bottom = windowHeight;
+		HBRUSH backgroundBrush = CreateSolidBrush(RGB(0, 0, 0));
+		FillRect(hdcMem, &windowRectangle, backgroundBrush);
+		DeleteObject(backgroundBrush);
+
+		/* Cleaning up double-buffering. */
+		BitBlt(hdc, 0, 0, windowWidth, windowHeight, hdcMem, scrollX, 0, SRCCOPY);
+		SelectObject(hdcMem, hOld);
+		DeleteObject(hbmMem);
+		DeleteDC(hdcMem);
+
+		EndPaint(hWnd, &ps);
+		break;
+	}
+	case WM_DESTROY:
+		break;
+	default:
+		return DefWindowProc(hWnd, message, wParam, lParam);
+	}
+}
+
 // Message handler for about box.
-INT_PTR CALLBACK About(HWND hDlg, UINT message, WPARAM wParam, LPARAM lParam)
+INT_PTR CALLBACK ErrorBox(HWND hDlg, UINT message, WPARAM wParam, LPARAM lParam)
 {
 	UNREFERENCED_PARAMETER(lParam);
 	switch (message)
