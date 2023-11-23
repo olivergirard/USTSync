@@ -7,16 +7,23 @@
 #include <windowsx.h>
 #include <WinUser.h>
 #include <tuple>
-
-#include "GL/glew.h"
-#include "GLFW/glfw3.h"
-#include "glm/glm.hpp"
+#include <filesystem>
 
 #include "framework.h"
 #include "resource.h"
 #include "shtypes.h"
 #include "shlobj_core.h"
 #include "UTAURead.h"
+
+/* For music playing. */
+#include <Mmsystem.h>
+#include <mciapi.h>
+#pragma comment(lib, "Winmm.lib")
+
+/* For graphics displaying. */
+#include "GL/glew.h"
+#include "GLFW/glfw3.h"
+#include "glm/glm.hpp"
 
 #define MAX_LOADSTRING 100
 
@@ -56,6 +63,7 @@ RECT selectedRange = { 0, 0, 0, 0 };
 RECT previousRange = { 0, 0, 0, 0 };
 
 COLORREF colorToChange = NULL;
+std::string mp3File;
 
 std::vector<std::tuple<RECT, std::wstring, double, COLORREF>> noteRectangles;
 
@@ -434,12 +442,12 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam)
 		switch (wmId)
 		{
 		case ID_NOPERSIST_CENTERED: {
-			
+
 			colorToChange = RGB(0, 255, 0);
 			AddEffect(hWnd, colorToChange);
 			break;
 		}
-		case IDM_FILE:
+		case IDM_UST:
 		{
 			WCHAR buffer[MAX_PATH];
 			OPENFILENAME ofn = {};
@@ -449,6 +457,22 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam)
 			ofn.Flags = OFN_EXPLORER | OFN_ENABLESIZING | OFN_HIDEREADONLY | OFN_PATHMUSTEXIST | OFN_FILEMUSTEXIST;
 			if (GetOpenFileName(&ofn)) {
 				UTAURead::AnalyzeNotes(ofn.lpstrFile);
+			}
+
+			break;
+		}
+		case IDM_MP3: 
+		{
+			WCHAR buffer[MAX_PATH];
+			OPENFILENAME ofn = {};
+			ofn.lStructSize = sizeof(ofn);
+			ofn.lpstrFilter = TEXT("*.WAV\0");
+			ofn.lpstrFile = buffer, ofn.nMaxFile = MAX_PATH, * buffer = '\0';
+			ofn.Flags = OFN_EXPLORER | OFN_ENABLESIZING | OFN_HIDEREADONLY | OFN_PATHMUSTEXIST | OFN_FILEMUSTEXIST;
+			if (GetOpenFileName(&ofn)) {
+				filesystem::path myFile = ofn.lpstrFile;
+				std::string pathString{ myFile.string()};
+				mp3File = pathString;
 			}
 
 			break;
@@ -571,16 +595,13 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam)
 	return 0;
 } 
 
-
-
-
-
 LRESULT CALLBACK VideoProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam) {
 
 	switch (message)
 	{
 	case WM_CREATE: {
-		// ?
+
+		PlaySoundA(mp3File.c_str(), NULL, SND_FILENAME | SND_ASYNC);
 		break;
 	}
 	case WM_PAINT: {
@@ -621,6 +642,7 @@ LRESULT CALLBACK VideoProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam
 		break;
 	}
 	case WM_DESTROY:
+		PlaySound(NULL, 0, 0);
 		break;
 	default:
 		return DefWindowProc(hWnd, message, wParam, lParam);
