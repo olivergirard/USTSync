@@ -8,6 +8,10 @@
 #include <WinUser.h>
 #include <tuple>
 
+#include "GL/glew.h"
+#include "GLFW/glfw3.h"
+#include "glm/glm.hpp"
+
 #include "framework.h"
 #include "resource.h"
 #include "shtypes.h"
@@ -15,6 +19,10 @@
 #include "UTAURead.h"
 
 #define MAX_LOADSTRING 100
+
+/* My defines. */
+#define minCorners(a,b) (((a)<(b))?(a):(b))
+#define maxCorners(a,b) (((a)>(b))?(a):(b))
 
 // Global Variables:
 HINSTANCE hInst;                                // current instance
@@ -205,7 +213,7 @@ bool Overlap(RECT noteRectangle, RECT selectedRange) {
 	}
 	
 	/* Otherwise, dragging from the upper-left corner. */
-	if ((min(noteRectangle.right, right) > max(noteRectangle.left, left)) && (min(noteRectangle.bottom, bottom) > max(noteRectangle.top, top)) == true) {
+	if ((minCorners(noteRectangle.right, right) > maxCorners(noteRectangle.left, left)) && (minCorners(noteRectangle.bottom, bottom) > maxCorners(noteRectangle.top, top)) == true) {
 		return true;
 	}
 	else {
@@ -561,7 +569,10 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam)
 		return DefWindowProc(hWnd, message, wParam, lParam);
 	}
 	return 0;
-}
+} 
+
+
+
 
 
 LRESULT CALLBACK VideoProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam) {
@@ -615,6 +626,8 @@ LRESULT CALLBACK VideoProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam
 		return DefWindowProc(hWnd, message, wParam, lParam);
 	}
 }
+
+/* Functions for the actual text display. */
 
 // Message handler for about box.
 INT_PTR CALLBACK ErrorBox(HWND hDlg, UINT message, WPARAM wParam, LPARAM lParam)
