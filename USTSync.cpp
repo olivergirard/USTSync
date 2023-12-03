@@ -75,18 +75,8 @@ WCHAR szWindowClass[MAX_LOADSTRING];            // the main window class name
 
 /* My global variables. */
 
-/* Used for range selection. */
-int rangeLeft = 0;
-int rangeTop = 0;
-int rangeRight = 0;
-int rangeBottom = 0;
-
 int scrollX = 0;
 int scrollWidth = 0;
-
-/* Used for left-side mouse clicking. */
-int mouseX = 0;
-int mouseY = 0;
 
 int windowWidth = 870;
 int windowHeight = 550;
@@ -169,7 +159,7 @@ bool AllNotesEffected() {
 
 bool RangeChecker(RECT rectangle) {
 
-	if ((rectangle.left == 0) && (rectangle.right == 0) && (rectangle.top == 0) && (rectangle.bottom == 0)) {
+	if ((rectangle.left == -1) && (rectangle.right == -1) && (rectangle.top == -1) && (rectangle.bottom == -1)) {
 		return false;
 	}
 
@@ -213,6 +203,11 @@ void DrawNotes(HWND hWnd, HDC hdc) {
 
 		scrollWidth = temp;
 		initialRead = true;
+
+		AllocConsole();
+		freopen_s((FILE**)stdout, "CONOUT$", "w", stdout);
+
+		cout << scrollWidth;
 	}
 	else {
 
@@ -249,8 +244,8 @@ bool Overlap(RECT noteRectangle, RECT selectedRange) {
 	int top = selectedRange.top;
 	int bottom = selectedRange.bottom;
 
-	if (selectedRange.top > selectedRange.bottom && selectedRange.left > selectedRange.right) {
-		/* If dragging from the lower-right corner... */
+	/*if (selectedRange.top > selectedRange.bottom && selectedRange.left > selectedRange.right) {
+		// If dragging from the lower-right corner... 
 		left = selectedRange.right;
 		right = selectedRange.left;
 		bottom = selectedRange.top;
@@ -258,15 +253,15 @@ bool Overlap(RECT noteRectangle, RECT selectedRange) {
 
 	}
 	else if (selectedRange.right < selectedRange.left) {
-		/* If dragging from the upper-right corner... */
+		// If dragging from the upper-right corner... 
 		left = selectedRange.right;
 		right = selectedRange.left;
 	}
 	else if (selectedRange.bottom < selectedRange.top) {
-		/* If dragging from the lower-left corner... */
+		// If dragging from the lower-left corner... 
 		bottom = selectedRange.top;
 		top = selectedRange.bottom;
-	}
+	}*/
 
 	/* Otherwise, dragging from the upper-left corner. */
 	if ((minCorners(noteRectangle.right, right) > maxCorners(noteRectangle.left, left)) && (minCorners(noteRectangle.bottom, bottom) > maxCorners(noteRectangle.top, top)) == true) {
@@ -294,19 +289,10 @@ void SelectRange(HWND hWnd, HDC hdc) {
 
 			SetBkMode(hdc, TRANSPARENT);
 			DrawText(hdc, LPCWSTR(std::get<1>(tuple).c_str()), -1, &noteRectangle, DT_CENTER | DT_SINGLELINE | DT_VCENTER);
-
 		}
 	}
-}
 
-bool MouseInRectangle(RECT menuRectangle) {
-
-	if ((mouseX > menuRectangle.left) && (mouseX < menuRectangle.right) && (mouseY > menuRectangle.top) && (mouseY < menuRectangle.bottom)) {
-		return true;
-	}
-	else {
-		return false;
-	}
+	cout << selectedRange.left << ", " << selectedRange.top << ", " << selectedRange.right << ", " << selectedRange.bottom << endl;
 }
 
 void AddEffect(HWND hWnd, COLORREF colorToChange) {
@@ -386,6 +372,11 @@ SDL_Surface* UpdateSurface() {
 	SDL_Color textBackgroundColor = { 0xFF, 0xFF, 0xFF, 0xFF };
 
 	std::wstring lyric = std::get<1>(note);
+
+	if (lyric == L"R") {
+		lyric = L" ";
+	}
+
 	const wchar_t* wstr = lyric.c_str();
 
 	int wstr_len = (int)wcslen(wstr);
@@ -426,14 +417,9 @@ void RenderVideo() {
 				"SDL_Error: %s\n", SDL_GetError());
 		}
 		else {
-			// Declare rect of square
 			SDL_Rect squareRect;
-
-			// Square dimensions: Half of the min(SCREEN_WIDTH, SCREEN_HEIGHT)
 			squareRect.w = min(windowWidth, windowHeight) / 2;
 			squareRect.h = min(windowWidth, windowHeight) / 2;
-
-			// Square position: In the middle of the screen
 			squareRect.x = windowWidth / 2 - squareRect.w / 2;
 			squareRect.y = windowHeight / 2 - squareRect.h / 2;
 
@@ -576,17 +562,6 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam)
 	{
 		return 1;
 	}
-	case WM_RBUTTONDOWN: {
-
-		if (isRangeSelected == false) {
-			mouseX = GET_X_LPARAM(lParam);
-			mouseY = GET_Y_LPARAM(lParam);
-		}
-
-		InvalidateRect(hWnd, NULL, false);
-
-		break;
-	}
 	case WM_HSCROLL: {
 
 		switch (LOWORD(wParam))
@@ -604,23 +579,22 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam)
 			scrollX += 5;
 			break;
 		case SB_THUMBPOSITION:
+		case SB_THUMBTRACK:
 			scrollX = HIWORD(wParam);
 			break;
 		}
 
 		InvalidateRect(hWnd, NULL, false);
+		UpdateWindow(hWnd);
 		break;
 	}
 	case WM_LBUTTONDOWN:
 	{
-
 		if (UTAURead::WasFileRead() == true) {
 
-			selectedRange = { 0 };
-			rangeLeft = GET_X_LPARAM(lParam) + scrollX;
-			rangeTop = GET_Y_LPARAM(lParam);
-			selectedRange.left = rangeLeft;
-			selectedRange.top = rangeTop;
+			selectedRange = { -1, -1, -1, -1 };
+			selectedRange.left = GET_X_LPARAM(lParam) + scrollX;
+			selectedRange.top = GET_Y_LPARAM(lParam);
 
 			isRangeSelected = true;
 		}
@@ -632,18 +606,18 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam)
 		isRangeSelected = false;
 
 		InvalidateRect(hWnd, NULL, false);
+		UpdateWindow(hWnd);
 		break;
 	}
 	case WM_MOUSEMOVE:
 	{
 		if (isRangeSelected == true) {
-			rangeRight = GET_X_LPARAM(lParam) + scrollX;;
-			rangeBottom = GET_Y_LPARAM(lParam);
-			selectedRange.right = rangeRight;
-			selectedRange.bottom = rangeBottom;
+			selectedRange.right = GET_X_LPARAM(lParam) + scrollX;
+			selectedRange.bottom = GET_Y_LPARAM(lParam);
 
 			if (previousRange.right > selectedRange.right && previousRange.bottom > selectedRange.bottom) {
-				InvalidateRect(hWnd, &previousRange, true);
+				InvalidateRect(hWnd, &previousRange, false);
+				UpdateWindow(hWnd);
 			}
 		}
 
@@ -713,7 +687,7 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam)
 		}
 
 		InvalidateRect(hWnd, NULL, true);
-		RedrawWindow(hWnd, NULL, NULL, RDW_INVALIDATE | RDW_ALLCHILDREN | RDW_UPDATENOW);
+		UpdateWindow(hWnd);
 	}
 	break;
 	case WM_PAINT:
@@ -733,7 +707,7 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam)
 		si.fMask = SIF_ALL;
 		si.nMin = 0;
 		si.nMax = scrollWidth;
-		si.nPage = (clientRectangle.right - clientRectangle.left);
+		si.nPage = windowWidth;
 		si.nPos = scrollX;
 		si.nTrackPos = 0;
 		SetScrollInfo(hWnd, SB_HORZ, &si, true);
@@ -753,6 +727,7 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam)
 		windowRectangle.left = 0;
 		windowRectangle.top = 0;
 		windowRectangle.right = scrollWidth;
+		windowRectangle.bottom = windowHeight;
 		HBRUSH backgroundBrush = CreateSolidBrush(RGB(255, 255, 255));
 		FillRect(hdcMem, &windowRectangle, backgroundBrush);
 		DeleteObject(backgroundBrush);
@@ -763,16 +738,12 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam)
 			initialRead = true;
 		}
 
-		if (((rangeRight != 0) || (rangeBottom != 0)) && (isRangeSelected == true)) {
-			DrawRange(hWnd, hdcMem);
-		}
-
 		if ((isRangeSelected == false) && (RangeChecker(selectedRange) == true)) {
 			SelectRange(hWnd, hdcMem);
 		}
 
 		/* Cleaning up double-buffering. */
-		BitBlt(hdc, 0, 0, scrollWidth, height, hdcMem, scrollX, 0, SRCCOPY);
+		BitBlt(hdc, 0, 0, scrollWidth, windowHeight, hdcMem, scrollX, 0, SRCCOPY);
 		SelectObject(hdcMem, hOld);
 		DeleteObject(hbmMem);
 		DeleteDC(hdcMem);
