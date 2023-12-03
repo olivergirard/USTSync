@@ -65,7 +65,8 @@ extern "C" {
 /* My defines. */
 #define minCorners(a,b) (((a)<(b))?(a):(b))
 #define maxCorners(a,b) (((a)>(b))?(a):(b))
-#define FONT_PATH   "C:\\Users\\azure\\source\\repos\\USTSync\\fonts\\NotoSansJP-Regular.ttf"
+#define fontPath "C:\\Users\\azure\\source\\repos\\USTSync\\fonts\\NotoSansJP-Regular.ttf"
+#define baseFontSize 60
 
 // Global Variables:
 HINSTANCE hInst;                                // current instance
@@ -94,6 +95,8 @@ int windowY = 0;
 
 bool isRangeSelected = false;
 bool initialRead = false;
+bool addFont = false;
+char* userInput;
 
 RECT selectedRange = { 0, 0, 0, 0 };
 RECT previousRange = { 0, 0, 0, 0 };
@@ -103,14 +106,14 @@ std::string mp3File;
 
 clock_t startingTime;
 
-std::vector<std::tuple<RECT, std::wstring, double, COLORREF, double>> noteRectangles;
+std::vector<std::tuple<RECT, std::wstring, double, COLORREF, double, double>> noteRectangles;
 
 // Forward declarations of functions included in this code module:
 ATOM                MyRegisterClass(HINSTANCE hInstance);
 BOOL                InitInstance(HINSTANCE, int);
 LRESULT CALLBACK    WndProc(HWND, UINT, WPARAM, LPARAM);
-LRESULT CALLBACK    VideoProc(HWND, UINT, WPARAM, LPARAM);
 INT_PTR CALLBACK    ErrorBox(HWND, UINT, WPARAM, LPARAM);
+INT_PTR CALLBACK    FontBox(HWND, UINT, WPARAM, LPARAM);
 
 int APIENTRY wWinMain(_In_ HINSTANCE hInstance,
 	_In_opt_ HINSTANCE hPrevInstance,
@@ -154,7 +157,7 @@ bool AllNotesEffected() {
 
 	bool allNotes = true;
 
-	for (std::tuple<RECT, std::wstring, double, COLORREF, double> tuple : noteRectangles) {
+	for (std::tuple<RECT, std::wstring, double, COLORREF, double, double> tuple : noteRectangles) {
 		if (std::get<3>(tuple) == RGB(255, 255, 255)) {
 			allNotes = false;
 			break;
@@ -197,7 +200,7 @@ void DrawNotes(HWND hWnd, HDC hdc) {
 			Rectangle(hdc, rectangle.left, rectangle.top, rectangle.right, rectangle.bottom);
 			DrawText(hdc, LPCWSTR(note.lyric.c_str()), -1, &rectangle, DT_CENTER | DT_SINGLELINE | DT_VCENTER);
 
-			std::tuple<RECT, std::wstring, double, COLORREF, double> data = std::make_tuple(rectangle, note.lyric, note.length, RGB(255, 255, 255), note.tempo);
+			std::tuple<RECT, std::wstring, double, COLORREF, double, double> data = std::make_tuple(rectangle, note.lyric, note.length, RGB(255, 255, 255), note.tempo, baseFontSize);
 			noteRectangles.push_back(data);
 
 			rectangle.left = rectangle.right + 1;
@@ -213,7 +216,7 @@ void DrawNotes(HWND hWnd, HDC hdc) {
 	}
 	else {
 
-		for (std::tuple<RECT, std::wstring, double, COLORREF, double> tuple : noteRectangles) {
+		for (std::tuple<RECT, std::wstring, double, COLORREF, double, double> tuple : noteRectangles) {
 
 			RECT noteRectangle = std::get<0>(tuple);
 
@@ -276,7 +279,7 @@ bool Overlap(RECT noteRectangle, RECT selectedRange) {
 
 void SelectRange(HWND hWnd, HDC hdc) {
 
-	for (std::tuple<RECT, std::wstring, double, COLORREF, double> tuple : noteRectangles) {
+	for (std::tuple<RECT, std::wstring, double, COLORREF, double, double> tuple : noteRectangles) {
 
 		RECT noteRectangle = std::get<0>(tuple);
 
@@ -311,13 +314,13 @@ void AddEffect(HWND hWnd, COLORREF colorToChange) {
 	/* Adding an effect to the range of notes. */
 	int index = 0;
 
-	for (std::tuple<RECT, std::wstring, double, COLORREF, double> tuple : noteRectangles) {
+	for (std::tuple<RECT, std::wstring, double, COLORREF, double, double> tuple : noteRectangles) {
 
 		RECT noteRectangle = std::get<0>(tuple);
 
 		if (Overlap(noteRectangle, selectedRange) == true) {
 
-			std::tuple<RECT, std::wstring, double, COLORREF, double> updatedTuple = { std::get<0>(tuple) , std::get<1>(tuple), std::get<2>(tuple), colorToChange, std::get<4>(tuple)};
+			std::tuple<RECT, std::wstring, double, COLORREF, double, double> updatedTuple = { std::get<0>(tuple) , std::get<1>(tuple), std::get<2>(tuple), colorToChange, std::get<4>(tuple), std::get<5>(tuple)};
 			noteRectangles[index] = updatedTuple;
 		}
 
@@ -325,7 +328,26 @@ void AddEffect(HWND hWnd, COLORREF colorToChange) {
 	}
 }
 
-std::wstring GetLyricToDisplay() {
+void AddFontSize(HWND hWnd, int newFontSize) {
+
+	/* Adding an effect to the range of notes. */
+	int index = 0;
+
+	for (std::tuple<RECT, std::wstring, double, COLORREF, double, double> tuple : noteRectangles) {
+
+		RECT noteRectangle = std::get<0>(tuple);
+
+		if (Overlap(noteRectangle, selectedRange) == true) {
+
+			std::tuple<RECT, std::wstring, double, COLORREF, double, double> updatedTuple = { std::get<0>(tuple) , std::get<1>(tuple), std::get<2>(tuple), std::get<3>(tuple), std::get<4>(tuple), newFontSize};
+			noteRectangles[index] = updatedTuple;
+		}
+
+		index++;
+	}
+}
+
+std::tuple<RECT, std::wstring, double, COLORREF, double, double> GetNoteToDisplay() {
 
 	double baseBPM = 125;
 
@@ -334,28 +356,28 @@ std::wstring GetLyricToDisplay() {
 	double noteSum = 0;
 	double tempoFactor;
 
-	for (std::tuple<RECT, std::wstring, double, COLORREF, double> note : noteRectangles) {
+	for (std::tuple<RECT, std::wstring, double, COLORREF, double, double> note : noteRectangles) {
 
 		tempoFactor = baseBPM / std::get<4>(note);
 		noteSum += std::get<2>(note) * tempoFactor;
 
 		if (noteSum >= duration * 1000) {
 
-			if (std::get<1>(note) == L"R") {
-				return L" ";
-			}
-			else {
-				return std::get<1>(note);
-			}
+			return note;
+			
 		}
 	}
 
-	return L" ";
+	RECT emptyRectangle = { 0 };
+	std::tuple<RECT, std::wstring, double, COLORREF, double, double> emptyNote = std::make_tuple(emptyRectangle, L" ", 0, RGB(0, 0, 0), 0, baseFontSize);
+	return emptyNote;
 }
 
 SDL_Surface* UpdateSurface() {
 
-	TTF_Font* font = TTF_OpenFont(FONT_PATH, 60);
+	std::tuple<RECT, std::wstring, double, COLORREF, double, double> note = GetNoteToDisplay();
+
+	TTF_Font* font = TTF_OpenFont(fontPath, std::get<5>(note));
 
 	const auto fontDirectionSuccess = TTF_SetFontDirection(font, TTF_DIRECTION_LTR);
 	const auto fontScriptNameSuccess = TTF_SetFontScriptName(font, "Hani");
@@ -363,7 +385,7 @@ SDL_Surface* UpdateSurface() {
 	SDL_Color textColor = { 0x00, 0x00, 0x00, 0xFF };
 	SDL_Color textBackgroundColor = { 0xFF, 0xFF, 0xFF, 0xFF };
 
-	std::wstring lyric = GetLyricToDisplay();
+	std::wstring lyric = std::get<1>(note);
 	const wchar_t* wstr = lyric.c_str();
 
 	int wstr_len = (int)wcslen(wstr);
@@ -639,6 +661,16 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam)
 			AddEffect(hWnd, colorToChange);
 			break;
 		}
+		case ID_EFFECTS_FONTSIZE: {
+
+			DialogBox(hInst, MAKEINTRESOURCE(IDD_FONTSIZE), hWnd, FontBox);
+			while (addFont == false) {
+				/* Wait for the user to close the dialog box. */
+			}
+			AddFontSize(hWnd, stoi(userInput));
+			addFont = false;
+			break;
+		}
 		case IDM_UST:
 		{
 			WCHAR buffer[MAX_PATH];
@@ -674,17 +706,6 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam)
 			PlaySoundA(mp3File.c_str(), NULL, SND_FILENAME | SND_ASYNC);
 
 			RenderVideo();
-
-			/*if (AllNotesEffected() == true) {
-
-				startingTime = clock();
-				PlaySoundA(mp3File.c_str(), NULL, SND_FILENAME | SND_ASYNC);
-
-				RenderVideo();
-			}
-			else {
-				DialogBox(hInst, MAKEINTRESOURCE(IDD_RENDERFAIL), hWnd, ErrorBox);
-			}*/
 
 			break;
 		default:
@@ -781,6 +802,33 @@ INT_PTR CALLBACK ErrorBox(HWND hDlg, UINT message, WPARAM wParam, LPARAM lParam)
 		if (LOWORD(wParam) == IDOK || LOWORD(wParam) == IDCANCEL)
 		{
 			EndDialog(hDlg, LOWORD(wParam));
+			return (INT_PTR)TRUE;
+		}
+		break;
+	}
+	return (INT_PTR)FALSE;
+}
+
+INT_PTR CALLBACK FontBox(HWND hDlg, UINT message, WPARAM wParam, LPARAM lParam)
+{
+	UNREFERENCED_PARAMETER(lParam);
+	switch (message)
+	{
+	case WM_INITDIALOG:
+		return (INT_PTR)TRUE;
+
+	case WM_COMMAND:
+		if (LOWORD(wParam) == IDOK)
+		{
+			HWND input = GetDlgItem(hDlg, IDC_EDIT1);
+			DWORD dwInputLength = Edit_GetTextLength(input);
+
+			userInput = new char[dwInputLength + 1];
+			GetWindowTextA(input, userInput, dwInputLength + 1);
+
+			EndDialog(hDlg, LOWORD(wParam));
+			
+			addFont = true;
 			return (INT_PTR)TRUE;
 		}
 		break;
