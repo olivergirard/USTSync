@@ -1,4 +1,4 @@
-#include <fstream>
+﻿#include <fstream>
 #include <windows.h>
 #include <commdlg.h>
 #include <iostream>
@@ -8,28 +8,64 @@
 #include <WinUser.h>
 #include <tuple>
 #include <filesystem>
+#include <time.h>
+#include <math.h>
 
-#include "framework.h"
-#include "resource.h"
-#include "shtypes.h"
-#include "shlobj_core.h"
-#include "UTAURead.h"
+#include "opengl.h"
+#include "vec234.h"
+#include "vector.h"
+
+/* For graphics. */
+#include "glew.h"
+#include "ft2build.h"
+#include "freetype/freetype.h"
+#include "freetype-gl/freetype-gl.h"
+#include "freetype-gl/vertex-buffer.h"
+#include "GLFW/glfw3.h"
+
+#include <glut.h>
+
+#include <stdlib.h>
+#include <stdio.h>
+#include <string.h>
+
+#ifdef __cplusplus
+extern "C" {
+#endif
+
+#include "freetype-gl/mat4.h"
+#include "freetype-gl/mat4.c"
+#include "freetype-gl/shader.h"
+#include "freetype-gl/shader.c"
+
+
+#ifdef __cplusplus
+}
+#endif
 
 /* For music playing. */
 #include <Mmsystem.h>
 #include <mciapi.h>
 #pragma comment(lib, "Winmm.lib")
 
-/* For graphics displaying. */
-#include "GL/glew.h"
-#include "GLFW/glfw3.h"
-#include "glm/glm.hpp"
+#include "framework.h"
+#include "resource.h"
+#include "shtypes.h"
+#include "shlobj_core.h"
+#include "UTAURead.h"
+#include "utf8-utils.h"
+
+#include "SDL/SDL.h"
+#include "SDL/SDL_ttf.h"
 
 #define MAX_LOADSTRING 100
+#define GLEW_STATIC
+#define SDL_MAIN_HANDLED
 
 /* My defines. */
 #define minCorners(a,b) (((a)<(b))?(a):(b))
 #define maxCorners(a,b) (((a)>(b))?(a):(b))
+#define FONT_PATH   "C:\\Users\\azure\\source\\repos\\USTSync\\fonts\\NotoSansJP-Regular.ttf"
 
 // Global Variables:
 HINSTANCE hInst;                                // current instance
@@ -51,7 +87,7 @@ int scrollWidth = 0;
 int mouseX = 0;
 int mouseY = 0;
 
-int windowWidth = 1000;
+int windowWidth = 870;
 int windowHeight = 550;
 int windowX = 0;
 int windowY = 0;
@@ -65,7 +101,9 @@ RECT previousRange = { 0, 0, 0, 0 };
 COLORREF colorToChange = NULL;
 std::string mp3File;
 
-std::vector<std::tuple<RECT, std::wstring, double, COLORREF>> noteRectangles;
+clock_t startingTime;
+
+std::vector<std::tuple<RECT, std::wstring, double, COLORREF, double>> noteRectangles;
 
 // Forward declarations of functions included in this code module:
 ATOM                MyRegisterClass(HINSTANCE hInstance);
@@ -116,7 +154,7 @@ bool AllNotesEffected() {
 
 	bool allNotes = true;
 
-	for (std::tuple<RECT, std::wstring, double, COLORREF> tuple : noteRectangles) {
+	for (std::tuple<RECT, std::wstring, double, COLORREF, double> tuple : noteRectangles) {
 		if (std::get<3>(tuple) == RGB(255, 255, 255)) {
 			allNotes = false;
 			break;
@@ -159,17 +197,23 @@ void DrawNotes(HWND hWnd, HDC hdc) {
 			Rectangle(hdc, rectangle.left, rectangle.top, rectangle.right, rectangle.bottom);
 			DrawText(hdc, LPCWSTR(note.lyric.c_str()), -1, &rectangle, DT_CENTER | DT_SINGLELINE | DT_VCENTER);
 
-			std::tuple<RECT, std::wstring, double, COLORREF> data = std::make_tuple(rectangle, note.lyric, note.length, RGB(255, 255, 255));
+			std::tuple<RECT, std::wstring, double, COLORREF, double> data = std::make_tuple(rectangle, note.lyric, note.length, RGB(255, 255, 255), note.tempo);
 			noteRectangles.push_back(data);
 
 			rectangle.left = rectangle.right + 1;
 		}
 
+		rectangle.right = rectangle.left + 20;
+		HBRUSH hbrush = CreateSolidBrush(RGB(255, 255, 255));
+		FillRect(hdc, &rectangle, hbrush);
+		temp += 20;
+
 		scrollWidth = temp;
+		initialRead = true;
 	}
 	else {
 
-		for (std::tuple<RECT, std::wstring, double, COLORREF> tuple : noteRectangles) {
+		for (std::tuple<RECT, std::wstring, double, COLORREF, double> tuple : noteRectangles) {
 
 			RECT noteRectangle = std::get<0>(tuple);
 
@@ -209,7 +253,8 @@ bool Overlap(RECT noteRectangle, RECT selectedRange) {
 		bottom = selectedRange.top;
 		top = selectedRange.bottom;
 
-	} else if (selectedRange.right < selectedRange.left) {
+	}
+	else if (selectedRange.right < selectedRange.left) {
 		/* If dragging from the upper-right corner... */
 		left = selectedRange.right;
 		right = selectedRange.left;
@@ -219,7 +264,7 @@ bool Overlap(RECT noteRectangle, RECT selectedRange) {
 		bottom = selectedRange.top;
 		top = selectedRange.bottom;
 	}
-	
+
 	/* Otherwise, dragging from the upper-left corner. */
 	if ((minCorners(noteRectangle.right, right) > maxCorners(noteRectangle.left, left)) && (minCorners(noteRectangle.bottom, bottom) > maxCorners(noteRectangle.top, top)) == true) {
 		return true;
@@ -231,7 +276,7 @@ bool Overlap(RECT noteRectangle, RECT selectedRange) {
 
 void SelectRange(HWND hWnd, HDC hdc) {
 
-	for (std::tuple<RECT, std::wstring, double, COLORREF> tuple : noteRectangles) {
+	for (std::tuple<RECT, std::wstring, double, COLORREF, double> tuple : noteRectangles) {
 
 		RECT noteRectangle = std::get<0>(tuple);
 
@@ -266,18 +311,166 @@ void AddEffect(HWND hWnd, COLORREF colorToChange) {
 	/* Adding an effect to the range of notes. */
 	int index = 0;
 
-	for (std::tuple<RECT, std::wstring, double, COLORREF> tuple : noteRectangles) {
+	for (std::tuple<RECT, std::wstring, double, COLORREF, double> tuple : noteRectangles) {
 
 		RECT noteRectangle = std::get<0>(tuple);
 
 		if (Overlap(noteRectangle, selectedRange) == true) {
 
-			std::tuple<RECT, std::wstring, double, COLORREF> updatedTuple = { std::get<0>(tuple) , std::get<1>(tuple), std::get<2>(tuple), colorToChange};
+			std::tuple<RECT, std::wstring, double, COLORREF, double> updatedTuple = { std::get<0>(tuple) , std::get<1>(tuple), std::get<2>(tuple), colorToChange, std::get<4>(tuple)};
 			noteRectangles[index] = updatedTuple;
 		}
 
 		index++;
 	}
+}
+
+std::wstring GetLyricToDisplay() {
+
+	double baseBPM = 125;
+
+	clock_t currentTime = clock();
+	double duration = double(currentTime - startingTime) / double(CLOCKS_PER_SEC);
+	double noteSum = 0;
+	double tempoFactor;
+
+	for (std::tuple<RECT, std::wstring, double, COLORREF, double> note : noteRectangles) {
+
+		tempoFactor = baseBPM / std::get<4>(note);
+		noteSum += std::get<2>(note) * tempoFactor;
+
+		if (noteSum >= duration * 1000) {
+
+			if (std::get<1>(note) == L"R") {
+				return L" ";
+			}
+			else {
+				return std::get<1>(note);
+			}
+		}
+	}
+
+	return L" ";
+}
+
+SDL_Surface* UpdateSurface() {
+
+	TTF_Font* font = TTF_OpenFont(FONT_PATH, 60);
+
+	const auto fontDirectionSuccess = TTF_SetFontDirection(font, TTF_DIRECTION_LTR);
+	const auto fontScriptNameSuccess = TTF_SetFontScriptName(font, "Hani");
+
+	SDL_Color textColor = { 0x00, 0x00, 0x00, 0xFF };
+	SDL_Color textBackgroundColor = { 0xFF, 0xFF, 0xFF, 0xFF };
+
+	std::wstring lyric = GetLyricToDisplay();
+	const wchar_t* wstr = lyric.c_str();
+
+	int wstr_len = (int)wcslen(wstr);
+	int num_chars = WideCharToMultiByte(CP_UTF8, 0, wstr, wstr_len, NULL, 0, NULL, NULL);
+	CHAR* strTo = (CHAR*)malloc((num_chars + 1) * sizeof(CHAR));
+
+	if (strTo)
+	{
+		WideCharToMultiByte(CP_UTF8, 0, wstr, wstr_len, strTo, num_chars, NULL, NULL);
+		strTo[num_chars] = '\0';
+	}
+
+	SDL_Surface* textSurface = TTF_RenderUTF8_Blended(font, strTo, textColor);
+	if (!textSurface) {
+		printf("Unable to render text surface!\n"
+			"SDL2_ttf Error: %s\n", TTF_GetError());
+	}
+
+	return textSurface;
+}
+
+void RenderVideo() {
+
+	SDL_Init(SDL_INIT_VIDEO);
+	TTF_Init();
+
+	SDL_Window* window = SDL_CreateWindow("USTSync: Video", windowX, windowY, windowWidth, windowHeight, SDL_WINDOW_SHOWN);
+
+	if (!window) {
+		printf("Window could not be created!\n"
+			"SDL_Error: %s\n", SDL_GetError());
+	}
+	else {
+		SDL_Renderer* renderer = SDL_CreateRenderer(window, -1, SDL_RENDERER_ACCELERATED);
+
+		if (!renderer) {
+			printf("Renderer could not be created!\n"
+				"SDL_Error: %s\n", SDL_GetError());
+		}
+		else {
+			// Declare rect of square
+			SDL_Rect squareRect;
+
+			// Square dimensions: Half of the min(SCREEN_WIDTH, SCREEN_HEIGHT)
+			squareRect.w = min(windowWidth, windowHeight) / 2;
+			squareRect.h = min(windowWidth, windowHeight) / 2;
+
+			// Square position: In the middle of the screen
+			squareRect.x = windowWidth / 2 - squareRect.w / 2;
+			squareRect.y = windowHeight / 2 - squareRect.h / 2;
+
+			SDL_Surface* textSurface = UpdateSurface();
+
+			if (!textSurface) {
+				printf("Unable to render text surface!\n"
+					"SDL2_ttf Error: %s\n", TTF_GetError());
+			}
+			else {
+
+				SDL_Texture* text = NULL;
+				SDL_Rect textRect;
+				
+				text = SDL_CreateTextureFromSurface(renderer, textSurface);
+				if (!text) {
+					printf("Unable to create texture from rendered text!\n"
+						"SDL2 Error: %s\n", SDL_GetError());
+					return;
+				}
+
+				textRect.w = textSurface->w;
+				textRect.h = textSurface->h;
+
+				SDL_FreeSurface(textSurface);
+
+				textRect.x = (windowWidth - textRect.w) / 2;
+				textRect.y = (windowHeight - textRect.h) / 2;
+
+				bool quit = false;
+				while (true)
+				{
+					SDL_SetRenderDrawColor(renderer, 0xFF, 0xFF, 0xFF, 0xFF);
+					SDL_RenderClear(renderer);
+
+					textSurface = UpdateSurface();
+					text = SDL_CreateTextureFromSurface(renderer, textSurface);
+
+					textRect.w = textSurface->w;
+					textRect.h = textSurface->h;
+
+					SDL_FreeSurface(textSurface);
+
+					textRect.x = (windowWidth - textRect.w) / 2;
+					textRect.y = (windowHeight - textRect.h) / 2;
+
+					SDL_RenderCopy(renderer, text, NULL, &textRect);
+					SDL_RenderPresent(renderer);
+				}
+
+				SDL_DestroyRenderer(renderer);
+			}
+		}
+
+		SDL_DestroyWindow(window);
+	}
+
+	TTF_Quit();
+	SDL_Quit();
 }
 
 /* End of my functions. */
@@ -320,6 +513,7 @@ ATOM MyRegisterClass(HINSTANCE hInstance)
 //
 BOOL InitInstance(HINSTANCE hInstance, int nCmdShow)
 {
+
 	hInst = hInstance; // Store instance handle in our global variable
 
 	RECT desktop;
@@ -356,7 +550,7 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam)
 {
 	switch (message)
 	{
-	case WM_ERASEBKGND: 
+	case WM_ERASEBKGND:
 	{
 		return 1;
 	}
@@ -372,7 +566,7 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam)
 		break;
 	}
 	case WM_HSCROLL: {
-		
+
 		switch (LOWORD(wParam))
 		{
 		case SB_PAGELEFT:
@@ -401,7 +595,7 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam)
 		if (UTAURead::WasFileRead() == true) {
 
 			selectedRange = { 0 };
-			rangeLeft = GET_X_LPARAM(lParam);
+			rangeLeft = GET_X_LPARAM(lParam) + scrollX;
 			rangeTop = GET_Y_LPARAM(lParam);
 			selectedRange.left = rangeLeft;
 			selectedRange.top = rangeTop;
@@ -421,12 +615,10 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam)
 	case WM_MOUSEMOVE:
 	{
 		if (isRangeSelected == true) {
-			rangeRight = GET_X_LPARAM(lParam);
+			rangeRight = GET_X_LPARAM(lParam) + scrollX;;
 			rangeBottom = GET_Y_LPARAM(lParam);
 			selectedRange.right = rangeRight;
 			selectedRange.bottom = rangeBottom;
-
-			InvalidateRect(hWnd, NULL, false);
 
 			if (previousRange.right > selectedRange.right && previousRange.bottom > selectedRange.bottom) {
 				InvalidateRect(hWnd, &previousRange, true);
@@ -461,7 +653,7 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam)
 
 			break;
 		}
-		case IDM_MP3: 
+		case IDM_MP3:
 		{
 			WCHAR buffer[MAX_PATH];
 			OPENFILENAME ofn = {};
@@ -471,40 +663,29 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam)
 			ofn.Flags = OFN_EXPLORER | OFN_ENABLESIZING | OFN_HIDEREADONLY | OFN_PATHMUSTEXIST | OFN_FILEMUSTEXIST;
 			if (GetOpenFileName(&ofn)) {
 				filesystem::path myFile = ofn.lpstrFile;
-				std::string pathString{ myFile.string()};
+				std::string pathString{ myFile.string() };
 				mp3File = pathString;
 			}
 
 			break;
 		}
 		case IDM_RENDER:
+			startingTime = clock();
+			PlaySoundA(mp3File.c_str(), NULL, SND_FILENAME | SND_ASYNC);
 
-			if (AllNotesEffected() == true) {
+			RenderVideo();
 
-				WNDCLASS cldclass;
-				cldclass.style = CS_HREDRAW | CS_VREDRAW;
-				cldclass.cbClsExtra = 0;
-				cldclass.cbWndExtra = 0;
-				cldclass.lpfnWndProc = VideoProc;
-				cldclass.hInstance = hInst;
-				cldclass.hIcon = LoadIcon(NULL, IDI_APPLICATION);
-				cldclass.hCursor = LoadCursor(NULL, IDC_ARROW);
-				cldclass.hbrBackground = (HBRUSH)GetStockObject(WHITE_BRUSH);
-				cldclass.lpszMenuName = NULL;
-				cldclass.lpszClassName = L"VideoWindow";
+			/*if (AllNotesEffected() == true) {
 
-				RegisterClass(&cldclass);
+				startingTime = clock();
+				PlaySoundA(mp3File.c_str(), NULL, SND_FILENAME | SND_ASYNC);
 
-				HMENU hMenu = LoadMenu(NULL, MAKEINTRESOURCE(IDC_VIDEOWINDOW));
-				HWND videoWindow = CreateWindow(L"VideoWindow", NULL, WS_VISIBLE | WS_OVERLAPPEDWINDOW, windowX, windowY, windowWidth, windowHeight, hWnd, hMenu, hInst, NULL);
-				ShowWindow(videoWindow, 5);
-				UpdateWindow(videoWindow);
-
+				RenderVideo();
 			}
 			else {
 				DialogBox(hInst, MAKEINTRESOURCE(IDD_RENDERFAIL), hWnd, ErrorBox);
-			}
-			
+			}*/
+
 			break;
 		default:
 			return DefWindowProc(hWnd, message, wParam, lParam);
@@ -551,29 +732,21 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam)
 		windowRectangle.left = 0;
 		windowRectangle.top = 0;
 		windowRectangle.right = scrollWidth;
-		HBRUSH backgroundBrush = CreateSolidBrush(RGB(255, 255,255));
+		HBRUSH backgroundBrush = CreateSolidBrush(RGB(255, 255, 255));
 		FillRect(hdcMem, &windowRectangle, backgroundBrush);
 		DeleteObject(backgroundBrush);
-		
+
 		/* Actual paint conditions. */
 		if (UTAURead::WasFileRead() == true) {
 			DrawNotes(hWnd, hdcMem);
 			initialRead = true;
 		}
-		
+
 		if (((rangeRight != 0) || (rangeBottom != 0)) && (isRangeSelected == true)) {
-			previousRange = selectedRange;
 			DrawRange(hWnd, hdcMem);
 		}
 
 		if ((isRangeSelected == false) && (RangeChecker(selectedRange) == true)) {
-			previousRange = { 0, 0, 0, 0 };
-
-			rangeLeft = 0;
-			rangeTop = 0;
-			rangeRight = 0;
-			rangeBottom = 0;
-
 			SelectRange(hWnd, hdcMem);
 		}
 
@@ -593,63 +766,7 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam)
 		return DefWindowProc(hWnd, message, wParam, lParam);
 	}
 	return 0;
-} 
-
-LRESULT CALLBACK VideoProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam) {
-
-	switch (message)
-	{
-	case WM_CREATE: {
-
-		PlaySoundA(mp3File.c_str(), NULL, SND_FILENAME | SND_ASYNC);
-		break;
-	}
-	case WM_PAINT: {
-
-		/* Variable declaration. */
-		HDC hdc;
-		PAINTSTRUCT ps;
-		HDC hdcMem;
-		HBITMAP hbmMem;
-		HANDLE hOld;
-
-		/* Double-buffering. */
-		hdc = BeginPaint(hWnd, &ps);
-		hdcMem = CreateCompatibleDC(hdc);
-
-		RECT windowRectangle;
-		GetWindowRect(hWnd, &windowRectangle);
-
-		hbmMem = CreateCompatibleBitmap(hdc, windowWidth, windowHeight);
-		hOld = SelectObject(hdcMem, hbmMem);
-
-		/* Solid, white background. */
-		windowRectangle.left = 0;
-		windowRectangle.top = 0;
-		windowRectangle.right = windowWidth;
-		windowRectangle.bottom = windowHeight;
-		HBRUSH backgroundBrush = CreateSolidBrush(RGB(0, 0, 0));
-		FillRect(hdcMem, &windowRectangle, backgroundBrush);
-		DeleteObject(backgroundBrush);
-
-		/* Cleaning up double-buffering. */
-		BitBlt(hdc, 0, 0, windowWidth, windowHeight, hdcMem, scrollX, 0, SRCCOPY);
-		SelectObject(hdcMem, hOld);
-		DeleteObject(hbmMem);
-		DeleteDC(hdcMem);
-
-		EndPaint(hWnd, &ps);
-		break;
-	}
-	case WM_DESTROY:
-		PlaySound(NULL, 0, 0);
-		break;
-	default:
-		return DefWindowProc(hWnd, message, wParam, lParam);
-	}
 }
-
-/* Functions for the actual text display. */
 
 // Message handler for about box.
 INT_PTR CALLBACK ErrorBox(HWND hDlg, UINT message, WPARAM wParam, LPARAM lParam)
