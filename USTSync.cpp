@@ -4,6 +4,9 @@
 #include <iostream>
 #include <string>
 #include <sstream>
+#include <stdlib.h>
+#include <stdio.h>
+#include <string.h>
 #include <windowsx.h>
 #include <WinUser.h>
 #include <tuple>
@@ -11,61 +14,26 @@
 #include <time.h>
 #include <math.h>
 
-#include "opengl.h"
-#include "vec234.h"
 #include "vector.h"
+#include "resource.h"
+#include "utf8-utils.h"
+#include "UTAURead.h"
 
 /* For graphics. */
-#include "glew.h"
-#include "ft2build.h"
-#include "freetype/freetype.h"
-#include "freetype-gl/freetype-gl.h"
-#include "freetype-gl/vertex-buffer.h"
-#include "GLFW/glfw3.h"
-
-#include <glut.h>
-
-#include <stdlib.h>
-#include <stdio.h>
-#include <string.h>
-
-#ifdef __cplusplus
-extern "C" {
-#endif
-
-#include "freetype-gl/mat4.h"
-#include "freetype-gl/mat4.c"
-#include "freetype-gl/shader.h"
-#include "freetype-gl/shader.c"
-
-
-#ifdef __cplusplus
-}
-#endif
+#include "SDL/SDL.h"
+#include "SDL/SDL_ttf.h"
 
 /* For music playing. */
 #include <Mmsystem.h>
 #include <mciapi.h>
 #pragma comment(lib, "Winmm.lib")
 
-#include "framework.h"
-#include "resource.h"
-#include "shtypes.h"
-#include "shlobj_core.h"
-#include "UTAURead.h"
-#include "utf8-utils.h"
-
-#include "SDL/SDL.h"
-#include "SDL/SDL_ttf.h"
-
 #define MAX_LOADSTRING 100
-#define GLEW_STATIC
 #define SDL_MAIN_HANDLED
 
 /* My defines. */
 #define minCorners(a,b) (((a)<(b))?(a):(b))
 #define maxCorners(a,b) (((a)>(b))?(a):(b))
-#define fontPath "C:\\Users\\azure\\source\\repos\\USTSync\\fonts\\NotoSansJP-Regular.ttf"
 #define baseFontSize 60
 
 // Global Variables:
@@ -74,27 +42,27 @@ WCHAR szTitle[MAX_LOADSTRING];                  // The title bar text
 WCHAR szWindowClass[MAX_LOADSTRING];            // the main window class name
 
 /* My global variables. */
-
-int scrollX = 0;
-int scrollWidth = 0;
-
 int windowWidth = 870;
 int windowHeight = 550;
 int windowX = 0;
 int windowY = 0;
 
-bool isRangeSelected = false;
+int scrollX = 0;
+int scrollWidth = 0;
+
 bool initialRead = false;
+bool isRangeSelected = false;
 bool addFont = false;
 char* userInput;
 
-RECT selectedRange = { 0, 0, 0, 0 };
-RECT previousRange = { 0, 0, 0, 0 };
+RECT selectedRange = { -1, -1, -1, -1 };
+RECT previousRange = { -1, -1, -1, -1 };
 
 COLORREF colorToChange = NULL;
 std::string mp3File;
-
 clock_t startingTime;
+std::filesystem::path fileLocation;
+std::string fontPath = "fonts/Gen Jyuu Gothic Monospace Bold.ttf";
 
 std::vector<std::tuple<RECT, std::wstring, double, COLORREF, double, double>> noteRectangles;
 
@@ -145,6 +113,7 @@ int APIENTRY wWinMain(_In_ HINSTANCE hInstance,
 
 bool AllNotesEffected() {
 
+	/* TODO */
 	bool allNotes = true;
 
 	for (std::tuple<RECT, std::wstring, double, COLORREF, double, double> tuple : noteRectangles) {
@@ -199,15 +168,13 @@ void DrawNotes(HWND hWnd, HDC hdc) {
 		rectangle.right = rectangle.left + 20;
 		HBRUSH hbrush = CreateSolidBrush(RGB(255, 255, 255));
 		FillRect(hdc, &rectangle, hbrush);
+		DeleteBrush(hbrush);
 		temp += 20;
 
 		scrollWidth = temp;
 		initialRead = true;
 
-		AllocConsole();
-		freopen_s((FILE**)stdout, "CONOUT$", "w", stdout);
-
-		cout << scrollWidth;
+		fontPath = filesystem::absolute(fontPath).generic_string();
 	}
 	else {
 
@@ -217,6 +184,7 @@ void DrawNotes(HWND hWnd, HDC hdc) {
 
 			HBRUSH hbrush = CreateSolidBrush(std::get<3>(tuple));
 			FillRect(hdc, &noteRectangle, hbrush);
+			DeleteBrush(hbrush);
 
 			SetDCPenColor(hdc, RGB(0, 0, 0));
 			SelectObject(hdc, GetStockObject(NULL_BRUSH));
@@ -229,14 +197,6 @@ void DrawNotes(HWND hWnd, HDC hdc) {
 	}
 }
 
-void DrawRange(HWND hWnd, HDC hdc) {
-
-	SetDCPenColor(hdc, RGB(0, 0, 0));
-	SetBkMode(hdc, OPAQUE);
-
-	Rectangle(hdc, selectedRange.left, selectedRange.top, selectedRange.right, selectedRange.bottom);
-}
-
 bool Overlap(RECT noteRectangle, RECT selectedRange) {
 
 	int left = selectedRange.left;
@@ -244,8 +204,8 @@ bool Overlap(RECT noteRectangle, RECT selectedRange) {
 	int top = selectedRange.top;
 	int bottom = selectedRange.bottom;
 
-	/*if (selectedRange.top > selectedRange.bottom && selectedRange.left > selectedRange.right) {
-		// If dragging from the lower-right corner... 
+	if (selectedRange.top > selectedRange.bottom && selectedRange.left > selectedRange.right) {
+		/* If dragging from the lower-right corner... */
 		left = selectedRange.right;
 		right = selectedRange.left;
 		bottom = selectedRange.top;
@@ -253,15 +213,15 @@ bool Overlap(RECT noteRectangle, RECT selectedRange) {
 
 	}
 	else if (selectedRange.right < selectedRange.left) {
-		// If dragging from the upper-right corner... 
+		/* If dragging from the upper-right corner... */
 		left = selectedRange.right;
 		right = selectedRange.left;
 	}
 	else if (selectedRange.bottom < selectedRange.top) {
-		// If dragging from the lower-left corner... 
+		/* If dragging from the lower-left corner... */
 		bottom = selectedRange.top;
 		top = selectedRange.bottom;
-	}*/
+	}
 
 	/* Otherwise, dragging from the upper-left corner. */
 	if ((minCorners(noteRectangle.right, right) > maxCorners(noteRectangle.left, left)) && (minCorners(noteRectangle.bottom, bottom) > maxCorners(noteRectangle.top, top)) == true) {
@@ -282,6 +242,7 @@ void SelectRange(HWND hWnd, HDC hdc) {
 
 			HBRUSH hbrush = CreateSolidBrush(RGB(100, 234, 255));
 			FillRect(hdc, &noteRectangle, hbrush);
+			DeleteBrush(hbrush);
 
 			SetDCPenColor(hdc, RGB(0, 0, 0));
 			SelectObject(hdc, GetStockObject(NULL_BRUSH));
@@ -291,9 +252,11 @@ void SelectRange(HWND hWnd, HDC hdc) {
 			DrawText(hdc, LPCWSTR(std::get<1>(tuple).c_str()), -1, &noteRectangle, DT_CENTER | DT_SINGLELINE | DT_VCENTER);
 		}
 	}
-
-	cout << selectedRange.left << ", " << selectedRange.top << ", " << selectedRange.right << ", " << selectedRange.bottom << endl;
 }
+
+/* Appear - RGB(0, 255, 0).
+	Group - RGB(255, 0, 0).
+*/
 
 void AddEffect(HWND hWnd, COLORREF colorToChange) {
 
@@ -312,6 +275,71 @@ void AddEffect(HWND hWnd, COLORREF colorToChange) {
 
 		index++;
 	}
+}
+
+void AddGrouping(HWND hWnd) {
+
+	bool firstNote = false;
+	bool timeToPush = false;
+
+	int left = 0;
+	int top = 0;
+	int right = 0;
+	int bottom = 0;
+
+	double newLength = 0;
+	double newTempo = 0;
+	std::wstring newLyric;
+
+	std::vector<std::tuple<RECT, std::wstring, double, COLORREF, double, double>> newNoteRectangles;
+	std::tuple<RECT, std::wstring, double, COLORREF, double, double> newNote = {};
+
+	AllocConsole();
+	freopen_s((FILE**)stdout, "CONOUT$", "w", stdout);
+
+	for (std::tuple<RECT, std::wstring, double, COLORREF, double, double> tuple : noteRectangles) {
+
+		RECT noteRectangle = std::get<0>(tuple);
+
+		if (Overlap(noteRectangle, selectedRange) == true) {
+
+			timeToPush = true;
+
+			if (firstNote == false) {
+				newNoteRectangles.push_back(newNote);
+				newTempo = std::get<4>(tuple);
+				left = noteRectangle.left;
+				top = noteRectangle.top;
+				firstNote = true;
+				
+			}
+
+			newLength += std::get<2>(tuple);
+			right = noteRectangle.right;
+			bottom = noteRectangle.bottom;
+			newLyric += std::get<1>(tuple);
+		}
+		else {
+
+			if (timeToPush == true) {
+				RECT newRectangle = { left, top, right, bottom };
+				newNote = std::make_tuple(newRectangle, newLyric, newLength, RGB(255, 255, 255), newTempo, (double)baseFontSize);
+				newNoteRectangles.push_back(newNote);
+				timeToPush = false;
+			}
+			
+			newNoteRectangles.push_back(tuple);
+		}
+	}
+
+	noteRectangles.clear();
+	noteRectangles = newNoteRectangles;
+
+	for (std::tuple<RECT, std::wstring, double, COLORREF, double, double> tuple : noteRectangles) {
+
+		cout << std::get<2>(tuple) << endl;
+	}
+
 }
 
 void AddFontSize(HWND hWnd, int newFontSize) {
@@ -344,18 +372,23 @@ std::tuple<RECT, std::wstring, double, COLORREF, double, double> GetNoteToDispla
 
 	for (std::tuple<RECT, std::wstring, double, COLORREF, double, double> note : noteRectangles) {
 
-		tempoFactor = baseBPM / std::get<4>(note);
-		noteSum += std::get<2>(note) * tempoFactor;
+		if (std::get<2>(note) != 0) {
+			tempoFactor = baseBPM / std::get<4>(note);
+			noteSum += std::get<2>(note) * tempoFactor;
 
-		if (noteSum >= duration * 1000) {
+			if (noteSum >= duration * 1000) {
 
-			return note;
-			
+				std::wcout << std::get<1>(note) << endl;
+				return note;
+
+			}
 		}
+		
 	}
 
 	RECT emptyRectangle = { 0 };
 	std::tuple<RECT, std::wstring, double, COLORREF, double, double> emptyNote = std::make_tuple(emptyRectangle, L" ", 0, RGB(0, 0, 0), 0, baseFontSize);
+
 	return emptyNote;
 }
 
@@ -363,7 +396,7 @@ SDL_Surface* UpdateSurface() {
 
 	std::tuple<RECT, std::wstring, double, COLORREF, double, double> note = GetNoteToDisplay();
 
-	TTF_Font* font = TTF_OpenFont(fontPath, std::get<5>(note));
+	TTF_Font* font = TTF_OpenFont(fontPath.c_str(), std::get<5>(note));
 
 	const auto fontDirectionSuccess = TTF_SetFontDirection(font, TTF_DIRECTION_LTR);
 	const auto fontScriptNameSuccess = TTF_SetFontScriptName(font, "Hani");
@@ -523,6 +556,7 @@ BOOL InitInstance(HINSTANCE hInstance, int nCmdShow)
 {
 
 	hInst = hInstance; // Store instance handle in our global variable
+	fileLocation = std::filesystem::current_path();
 
 	RECT desktop;
 	const HWND hDesktop = GetDesktopWindow();
@@ -635,6 +669,10 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam)
 			AddEffect(hWnd, colorToChange);
 			break;
 		}
+		case ID_EFFECTS_GROUP: {
+			AddGrouping(hWnd);
+			break;
+		}
 		case ID_EFFECTS_FONTSIZE: {
 
 			DialogBox(hInst, MAKEINTRESOURCE(IDD_FONTSIZE), hWnd, FontBox);
@@ -657,6 +695,8 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam)
 				UTAURead::AnalyzeNotes(ofn.lpstrFile);
 			}
 
+			std::filesystem::current_path(fileLocation);
+
 			break;
 		}
 		case IDM_MP3:
@@ -672,6 +712,8 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam)
 				std::string pathString{ myFile.string() };
 				mp3File = pathString;
 			}
+
+			std::filesystem::current_path(fileLocation);
 
 			break;
 		}
@@ -700,8 +742,6 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam)
 		HANDLE hOld;
 
 		/* Scroll bar. */
-		RECT clientRectangle = { 0 };
-		GetClientRect(hWnd, &clientRectangle);
 		SCROLLINFO si = { 0 };
 		si.cbSize = sizeof(SCROLLINFO);
 		si.fMask = SIF_ALL;
@@ -746,7 +786,9 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam)
 		BitBlt(hdc, 0, 0, scrollWidth, windowHeight, hdcMem, scrollX, 0, SRCCOPY);
 		SelectObject(hdcMem, hOld);
 		DeleteObject(hbmMem);
+		DeleteObject(hOld);
 		DeleteDC(hdcMem);
+		DeleteDC(hdc);
 
 		EndPaint(hWnd, &ps);
 	}
