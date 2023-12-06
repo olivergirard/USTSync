@@ -55,6 +55,8 @@ bool isRangeSelected = false;
 bool addFont = false;
 char* userInput;
 
+double baseBPM = 125;
+
 RECT selectedRange = { -1, -1, -1, -1 };
 RECT previousRange = { -1, -1, -1, -1 };
 
@@ -64,7 +66,11 @@ clock_t startingTime;
 std::filesystem::path fileLocation;
 std::string fontPath = "fonts/Gen Jyuu Gothic Monospace Bold.ttf";
 
-std::vector<std::tuple<RECT, std::wstring, double, COLORREF, double, double>> noteRectangles;
+enum Language { JP, ENG };
+Language songLanguage = ENG;	 //TODO allow for dynamic language change
+
+/* Notes with grouping. */
+std::vector<std::tuple<RECT, std::wstring, double, COLORREF, double, double, std::vector<std::tuple<RECT, std::wstring, double, COLORREF, double, double>>>> noteRectangles;
 
 // Forward declarations of functions included in this code module:
 ATOM                MyRegisterClass(HINSTANCE hInstance);
@@ -116,7 +122,7 @@ bool AllNotesEffected() {
 	/* TODO */
 	bool allNotes = true;
 
-	for (std::tuple<RECT, std::wstring, double, COLORREF, double, double> tuple : noteRectangles) {
+	for (std::tuple<RECT, std::wstring, double, COLORREF, double, double, std::vector<std::tuple<RECT, std::wstring, double, COLORREF, double, double>>> tuple : noteRectangles) {
 		if (std::get<3>(tuple) == RGB(255, 255, 255)) {
 			allNotes = false;
 			break;
@@ -146,6 +152,8 @@ void DrawNotes(HWND hWnd, HDC hdc) {
 	rectangle.top = 220;
 	rectangle.bottom = 250;
 
+	std::wstring newLyric;
+
 	SetDCPenColor(hdc, RGB(0, 0, 0));
 
 	int temp = 0;
@@ -157,9 +165,18 @@ void DrawNotes(HWND hWnd, HDC hdc) {
 			rectangle.right += note.length / 7;
 
 			Rectangle(hdc, rectangle.left, rectangle.top, rectangle.right, rectangle.bottom);
-			DrawText(hdc, LPCWSTR(note.lyric.c_str()), -1, &rectangle, DT_CENTER | DT_SINGLELINE | DT_VCENTER);
 
-			std::tuple<RECT, std::wstring, double, COLORREF, double, double> data = std::make_tuple(rectangle, note.lyric, note.length, RGB(255, 255, 255), note.tempo, baseFontSize);
+			if (note.lyric == L"R") {
+				newLyric = L" ";
+			}
+			else {
+				newLyric = note.lyric;
+			}
+
+			DrawText(hdc, LPCWSTR(newLyric.c_str()), -1, &rectangle, DT_CENTER | DT_SINGLELINE | DT_VCENTER);
+
+			std::vector<std::tuple<RECT, std::wstring, double, COLORREF, double, double>> emptyVector;
+			std::tuple<RECT, std::wstring, double, COLORREF, double, double, std::vector<std::tuple<RECT, std::wstring, double, COLORREF, double, double>>> data = std::make_tuple(rectangle, newLyric, note.length, RGB(255, 255, 255), note.tempo, baseFontSize, emptyVector);
 			noteRectangles.push_back(data);
 
 			rectangle.left = rectangle.right + 1;
@@ -178,7 +195,7 @@ void DrawNotes(HWND hWnd, HDC hdc) {
 	}
 	else {
 
-		for (std::tuple<RECT, std::wstring, double, COLORREF, double, double> tuple : noteRectangles) {
+		for (std::tuple<RECT, std::wstring, double, COLORREF, double, double, std::vector<std::tuple<RECT, std::wstring, double, COLORREF, double, double>>> tuple : noteRectangles) {
 
 			RECT noteRectangle = std::get<0>(tuple);
 
@@ -234,7 +251,7 @@ bool Overlap(RECT noteRectangle, RECT selectedRange) {
 
 void SelectRange(HWND hWnd, HDC hdc) {
 
-	for (std::tuple<RECT, std::wstring, double, COLORREF, double, double> tuple : noteRectangles) {
+	for (std::tuple<RECT, std::wstring, double, COLORREF, double, double, std::vector<std::tuple<RECT, std::wstring, double, COLORREF, double, double>>> tuple : noteRectangles) {
 
 		RECT noteRectangle = std::get<0>(tuple);
 
@@ -254,22 +271,18 @@ void SelectRange(HWND hWnd, HDC hdc) {
 	}
 }
 
-/* Appear - RGB(0, 255, 0).
-	Group - RGB(255, 0, 0).
-*/
-
 void AddEffect(HWND hWnd, COLORREF colorToChange) {
 
 	/* Adding an effect to the range of notes. */
 	int index = 0;
 
-	for (std::tuple<RECT, std::wstring, double, COLORREF, double, double> tuple : noteRectangles) {
+	for (std::tuple<RECT, std::wstring, double, COLORREF, double, double, std::vector<std::tuple<RECT, std::wstring, double, COLORREF, double, double>>> tuple : noteRectangles) {
 
 		RECT noteRectangle = std::get<0>(tuple);
 
 		if (Overlap(noteRectangle, selectedRange) == true) {
 
-			std::tuple<RECT, std::wstring, double, COLORREF, double, double> updatedTuple = { std::get<0>(tuple) , std::get<1>(tuple), std::get<2>(tuple), colorToChange, std::get<4>(tuple), std::get<5>(tuple)};
+			std::tuple<RECT, std::wstring, double, COLORREF, double, double, std::vector<std::tuple<RECT, std::wstring, double, COLORREF, double, double>>> updatedTuple = { std::get<0>(tuple) , std::get<1>(tuple), std::get<2>(tuple), colorToChange, std::get<4>(tuple), std::get<5>(tuple), std::get<6>(tuple) };
 			noteRectangles[index] = updatedTuple;
 		}
 
@@ -291,54 +304,66 @@ void AddGrouping(HWND hWnd) {
 	double newTempo = 0;
 	std::wstring newLyric;
 
-	std::vector<std::tuple<RECT, std::wstring, double, COLORREF, double, double>> newNoteRectangles;
-	std::tuple<RECT, std::wstring, double, COLORREF, double, double> newNote = {};
+	std::vector<std::tuple<RECT, std::wstring, double, COLORREF, double, double, std::vector<std::tuple<RECT, std::wstring, double, COLORREF, double, double>>>> newNoteRectangles;
+	std::vector<std::tuple<RECT, std::wstring, double, COLORREF, double, double>> group;
+	std::tuple<RECT, std::wstring, double, COLORREF, double, double, std::vector<std::tuple<RECT, std::wstring, double, COLORREF, double, double>>> newNote = {};
 
-	AllocConsole();
-	freopen_s((FILE**)stdout, "CONOUT$", "w", stdout);
-
-	for (std::tuple<RECT, std::wstring, double, COLORREF, double, double> tuple : noteRectangles) {
+	for (std::tuple<RECT, std::wstring, double, COLORREF, double, double, std::vector<std::tuple<RECT, std::wstring, double, COLORREF, double, double>>> tuple : noteRectangles) {
 
 		RECT noteRectangle = std::get<0>(tuple);
 
 		if (Overlap(noteRectangle, selectedRange) == true) {
 
+			std::tuple<RECT, std::wstring, double, COLORREF, double, double> noteToPush = std::make_tuple(std::get<0>(tuple), std::get<1>(tuple), std::get<2>(tuple), std::get<3>(tuple), std::get<4>(tuple), std::get<5>(tuple));
+			group.push_back(noteToPush);
 			timeToPush = true;
 
 			if (firstNote == false) {
-				newNoteRectangles.push_back(newNote);
 				newTempo = std::get<4>(tuple);
 				left = noteRectangle.left;
 				top = noteRectangle.top;
 				firstNote = true;
-				
+
 			}
 
 			newLength += std::get<2>(tuple);
 			right = noteRectangle.right;
 			bottom = noteRectangle.bottom;
 			newLyric += std::get<1>(tuple);
+
+			if (songLanguage == ENG) {
+				newLyric += L" ";
+			}
+
 		}
 		else {
 
+			/* Removing that pesky final space! */
+			newLyric = newLyric.substr(0, newLyric.length() - 1);
+
 			if (timeToPush == true) {
 				RECT newRectangle = { left, top, right, bottom };
-				newNote = std::make_tuple(newRectangle, newLyric, newLength, RGB(255, 255, 255), newTempo, (double)baseFontSize);
+				newNote = std::make_tuple(newRectangle, newLyric, newLength, RGB(255, 255, 255), newTempo, (double)baseFontSize, group);
 				newNoteRectangles.push_back(newNote);
 				timeToPush = false;
 			}
-			
+
 			newNoteRectangles.push_back(tuple);
 		}
 	}
 
+	newLyric = newLyric.substr(0, newLyric.length() - 1);
+
+	if (timeToPush == true) {
+		RECT newRectangle = { left, top, right, bottom };
+		newNote = std::make_tuple(newRectangle, newLyric, newLength, RGB(255, 255, 255), newTempo, (double)baseFontSize, group);
+		newNoteRectangles.push_back(newNote);
+		timeToPush = false;
+	}
+
 	noteRectangles.clear();
 	noteRectangles = newNoteRectangles;
-
-	for (std::tuple<RECT, std::wstring, double, COLORREF, double, double> tuple : noteRectangles) {
-
-		cout << std::get<2>(tuple) << endl;
-	}
+	newNoteRectangles.clear();
 
 }
 
@@ -347,13 +372,13 @@ void AddFontSize(HWND hWnd, int newFontSize) {
 	/* Adding an effect to the range of notes. */
 	int index = 0;
 
-	for (std::tuple<RECT, std::wstring, double, COLORREF, double, double> tuple : noteRectangles) {
+	for (std::tuple<RECT, std::wstring, double, COLORREF, double, double, std::vector<std::tuple<RECT, std::wstring, double, COLORREF, double, double>>> tuple : noteRectangles) {
 
 		RECT noteRectangle = std::get<0>(tuple);
 
 		if (Overlap(noteRectangle, selectedRange) == true) {
 
-			std::tuple<RECT, std::wstring, double, COLORREF, double, double> updatedTuple = { std::get<0>(tuple) , std::get<1>(tuple), std::get<2>(tuple), std::get<3>(tuple), std::get<4>(tuple), newFontSize};
+			std::tuple<RECT, std::wstring, double, COLORREF, double, double, std::vector<std::tuple<RECT, std::wstring, double, COLORREF, double, double>>> updatedTuple = { std::get<0>(tuple) , std::get<1>(tuple), std::get<2>(tuple), std::get<3>(tuple), std::get<4>(tuple), newFontSize, std::get<6>(tuple) };
 			noteRectangles[index] = updatedTuple;
 		}
 
@@ -361,16 +386,14 @@ void AddFontSize(HWND hWnd, int newFontSize) {
 	}
 }
 
-std::tuple<RECT, std::wstring, double, COLORREF, double, double> GetNoteToDisplay() {
-
-	double baseBPM = 125;
+std::tuple<RECT, std::wstring, double, COLORREF, double, double, std::vector<std::tuple<RECT, std::wstring, double, COLORREF, double, double>>> GetNoteToDisplay() {
 
 	clock_t currentTime = clock();
 	double duration = double(currentTime - startingTime) / double(CLOCKS_PER_SEC);
 	double noteSum = 0;
 	double tempoFactor;
 
-	for (std::tuple<RECT, std::wstring, double, COLORREF, double, double> note : noteRectangles) {
+	for (std::tuple<RECT, std::wstring, double, COLORREF, double, double, std::vector<std::tuple<RECT, std::wstring, double, COLORREF, double, double>>> note : noteRectangles) {
 
 		if (std::get<2>(note) != 0) {
 			tempoFactor = baseBPM / std::get<4>(note);
@@ -378,23 +401,73 @@ std::tuple<RECT, std::wstring, double, COLORREF, double, double> GetNoteToDispla
 
 			if (noteSum >= duration * 1000) {
 
-				std::wcout << std::get<1>(note) << endl;
 				return note;
 
 			}
 		}
-		
 	}
 
 	RECT emptyRectangle = { 0 };
-	std::tuple<RECT, std::wstring, double, COLORREF, double, double> emptyNote = std::make_tuple(emptyRectangle, L" ", 0, RGB(0, 0, 0), 0, baseFontSize);
+	std::vector<std::tuple<RECT, std::wstring, double, COLORREF, double, double>> emptyVector;
+	std::tuple<RECT, std::wstring, double, COLORREF, double, double, std::vector<std::tuple<RECT, std::wstring, double, COLORREF, double, double>>> emptyNote = std::make_tuple(emptyRectangle, L" ", 0, RGB(0, 0, 0), 0, baseFontSize, emptyVector);
 
 	return emptyNote;
 }
 
-SDL_Surface* UpdateSurface() {
+std::tuple<RECT, std::wstring, double, COLORREF, double, double, std::vector<std::tuple<RECT, std::wstring, double, COLORREF, double, double>>> GetGroupedNoteToDisplay() {
 
-	std::tuple<RECT, std::wstring, double, COLORREF, double, double> note = GetNoteToDisplay();
+	clock_t currentTime = clock();
+	double duration = double(currentTime - startingTime) / double(CLOCKS_PER_SEC);
+	double noteSum = 0;
+	double tempoFactor;
+	std::wstring lyric;
+
+	for (std::tuple<RECT, std::wstring, double, COLORREF, double, double, std::vector<std::tuple<RECT, std::wstring, double, COLORREF, double, double>>> note : noteRectangles) {
+
+		if (std::get<2>(note) != 0) {
+			tempoFactor = baseBPM / std::get<4>(note);
+			noteSum += std::get<2>(note) * tempoFactor;
+
+			if (noteSum >= duration * 1000) {
+
+				if (std::get<6>(note).empty() == false) {
+
+					noteSum -= std::get<2>(note) * tempoFactor;
+
+					for (std::tuple<RECT, std::wstring, double, COLORREF, double, double> groupedNote : std::get<6>(note)) {
+
+						noteSum += std::get<2>(groupedNote) * tempoFactor;
+
+						if (noteSum >= duration * 1000) {
+
+							std::vector<std::tuple<RECT, std::wstring, double, COLORREF, double, double>> emptyVector;
+
+							//needs a catch for last word.. maybe?
+							lyric = std::get<1>(groupedNote);
+							if (songLanguage == ENG) {
+								lyric += L" ";
+							}
+
+							std::tuple<RECT, std::wstring, double, COLORREF, double, double, std::vector<std::tuple<RECT, std::wstring, double, COLORREF, double, double>>> newGroupedNote = std::make_tuple(std::get<0>(groupedNote), lyric , std::get<2>(groupedNote), std::get<3>(groupedNote), std::get <4>(groupedNote), std::get<5>(groupedNote), emptyVector);
+							return newGroupedNote;
+						}
+					}
+				}
+				else {
+					return note;
+				}
+			}
+		}
+	}
+
+	RECT emptyRectangle = { 0 };
+	std::vector<std::tuple<RECT, std::wstring, double, COLORREF, double, double>> emptyVector;
+	std::tuple<RECT, std::wstring, double, COLORREF, double, double, std::vector<std::tuple<RECT, std::wstring, double, COLORREF, double, double>>> emptyNote = std::make_tuple(emptyRectangle, L" ", 0, RGB(0, 0, 0), 0, baseFontSize, emptyVector);
+
+	return emptyNote;
+}
+
+SDL_Surface* UpdateSurface(std::tuple<RECT, std::wstring, double, COLORREF, double, double, std::vector<std::tuple<RECT, std::wstring, double, COLORREF, double, double>>> note) {
 
 	TTF_Font* font = TTF_OpenFont(fontPath.c_str(), std::get<5>(note));
 
@@ -405,10 +478,6 @@ SDL_Surface* UpdateSurface() {
 	SDL_Color textBackgroundColor = { 0xFF, 0xFF, 0xFF, 0xFF };
 
 	std::wstring lyric = std::get<1>(note);
-
-	if (lyric == L"R") {
-		lyric = L" ";
-	}
 
 	const wchar_t* wstr = lyric.c_str();
 
@@ -431,10 +500,152 @@ SDL_Surface* UpdateSurface() {
 	return textSurface;
 }
 
+SDL_Surface* BouncingBall(std::tuple<RECT, std::wstring, double, COLORREF, double, double, std::vector<std::tuple<RECT, std::wstring, double, COLORREF, double, double>>> note) {
+
+	TTF_Font* font = TTF_OpenFont(fontPath.c_str(), 110);
+
+	const auto fontDirectionSuccess = TTF_SetFontDirection(font, TTF_DIRECTION_LTR);
+	const auto fontScriptNameSuccess = TTF_SetFontScriptName(font, "Hani");
+
+	SDL_Color textColor = { 0x00, 0x00, 0x00, 0xFF };
+	SDL_Color textBackgroundColor = { 0xFF, 0xFF, 0xFF, 0xFF };
+
+	std::wstring lyric = L".";
+
+	const wchar_t* wstr = lyric.c_str();
+
+	int wstr_len = (int)wcslen(wstr);
+	int num_chars = WideCharToMultiByte(CP_UTF8, 0, wstr, wstr_len, NULL, 0, NULL, NULL);
+	CHAR* strTo = (CHAR*)malloc((num_chars + 1) * sizeof(CHAR));
+
+	if (strTo)
+	{
+		WideCharToMultiByte(CP_UTF8, 0, wstr, wstr_len, strTo, num_chars, NULL, NULL);
+		strTo[num_chars] = '\0';
+	}
+
+	SDL_Surface* textSurface = TTF_RenderUTF8_Blended(font, strTo, textColor);
+	if (!textSurface) {
+		printf("Unable to render text surface!\n"
+			"SDL2_ttf Error: %s\n", TTF_GetError());
+	}
+
+	return textSurface;
+}
+
+static double half = 0;
+static double bounce = 100;
+
+double GetBounceFactor(std::tuple<RECT, std::wstring, double, COLORREF, double, double, std::vector<std::tuple<RECT, std::wstring, double, COLORREF, double, double>>> note) {
+
+	clock_t currentTime = clock();
+	double duration = double(currentTime - startingTime) / double(CLOCKS_PER_SEC);
+	double noteSum = 0;
+	double tempoFactor;
+
+	for (std::tuple<RECT, std::wstring, double, COLORREF, double, double, std::vector<std::tuple<RECT, std::wstring, double, COLORREF, double, double>>> note : noteRectangles) {
+
+		if (std::get<2>(note) != 0) {
+
+			tempoFactor = baseBPM / std::get<4>(note);
+
+			/* If the note is actually a grouping... */
+			if (std::get<3>(note) == RGB(255, 0, 0)) {
+
+				for (std::tuple<RECT, std::wstring, double, COLORREF, double, double> groupedNote : std::get<6>(note)) {
+
+					half = ((std::get<2>(groupedNote) * tempoFactor) / 2);
+					noteSum += std::get<2>(groupedNote) * tempoFactor;
+
+					if (noteSum >= duration * 1000) {
+
+						if ((noteSum - half - (half / 2) >= duration * 1000)) {
+							/* Only move for the first bit.*/
+							if (bounce >= 100) {
+								bounce--;
+							}
+						}
+						else if ((noteSum - (half / 2) <= duration * 1000)) {
+							/* Only move for the latter bit.*/
+							if (bounce <= 180) {
+								bounce++;
+							}
+						}
+						return bounce;
+					}
+				}
+
+
+			}
+			else {
+				noteSum += std::get<2>(note) * tempoFactor;
+			}
+		}
+	}
+
+	return 0;
+}
+
+static double walk = 0;
+
+double GetWalkFactor(std::tuple<RECT, std::wstring, double, COLORREF, double, double, std::vector<std::tuple<RECT, std::wstring, double, COLORREF, double, double>>> note) {
+
+	clock_t currentTime = clock();
+	double duration = double(currentTime - startingTime) / double(CLOCKS_PER_SEC);
+	double noteSum = 0;
+	double tempoFactor;
+
+	double amountToWalk = 1.1;
+
+	for (std::tuple<RECT, std::wstring, double, COLORREF, double, double, std::vector<std::tuple<RECT, std::wstring, double, COLORREF, double, double>>> note : noteRectangles) {
+
+		if (std::get<2>(note) != 0) {
+
+			tempoFactor = baseBPM / std::get<4>(note);
+
+			/* If the note is actually a grouping... */
+			if (std::get<3>(note) == RGB(255, 0, 0)) {
+
+				if (songLanguage == ENG) {
+					amountToWalk = std::get<1>(note).length() / (std::get<1>(note).length() / 5);
+				}
+
+				for (std::tuple<RECT, std::wstring, double, COLORREF, double, double> groupedNote : std::get<6>(note)) {
+
+					half = ((std::get<2>(groupedNote) * tempoFactor) / 2);
+					noteSum += std::get<2>(groupedNote) * tempoFactor;
+
+					if (noteSum >= duration * 1000) {
+
+						if ((noteSum - half - (half / 1.5) >= duration * 1000)) {
+							/* Only move for the first bit.*/
+							walk += amountToWalk;
+						}
+						else if ((noteSum - (half / 1.5) <= duration * 1000)) {
+							/* Only move for the latter bit.*/
+							walk += amountToWalk;
+						}
+
+						return walk;
+					}
+				}
+			}
+			else {
+				noteSum += std::get<2>(note) * tempoFactor;
+			}
+		}
+	}
+
+	return 0;
+}
+
+
 void RenderVideo() {
 
 	SDL_Init(SDL_INIT_VIDEO);
 	TTF_Init();
+
+	/* TODO set fonts at beginning. */
 
 	SDL_Window* window = SDL_CreateWindow("USTSync: Video", windowX, windowY, windowWidth, windowHeight, SDL_WINDOW_SHOWN);
 
@@ -456,39 +667,42 @@ void RenderVideo() {
 			squareRect.x = windowWidth / 2 - squareRect.w / 2;
 			squareRect.y = windowHeight / 2 - squareRect.h / 2;
 
-			SDL_Surface* textSurface = UpdateSurface();
+			std::tuple<RECT, std::wstring, double, COLORREF, double, double, std::vector<std::tuple<RECT, std::wstring, double, COLORREF, double, double>>> note = GetNoteToDisplay();
+			std::tuple<RECT, std::wstring, double, COLORREF, double, double, std::vector<std::tuple<RECT, std::wstring, double, COLORREF, double, double>>> previousNote;
 
-			if (!textSurface) {
-				printf("Unable to render text surface!\n"
-					"SDL2_ttf Error: %s\n", TTF_GetError());
-			}
-			else {
+			std::vector<SDL_Surface*> surfacesToDraw;
+			std::vector<SDL_Rect> rectanglesForSurfaces;
 
-				SDL_Texture* text = NULL;
-				SDL_Rect textRect;
-				
-				text = SDL_CreateTextureFromSurface(renderer, textSurface);
-				if (!text) {
-					printf("Unable to create texture from rendered text!\n"
-						"SDL2 Error: %s\n", SDL_GetError());
-					return;
-				}
+			SDL_Surface* textSurface;
+			SDL_Surface* ballSurface;
 
-				textRect.w = textSurface->w;
-				textRect.h = textSurface->h;
+			SDL_Texture* text = NULL;
+			SDL_Rect textRect;
 
-				SDL_FreeSurface(textSurface);
+			SDL_Texture* ball = NULL;
+			SDL_Rect ballRectangle;
 
-				textRect.x = (windowWidth - textRect.w) / 2;
-				textRect.y = (windowHeight - textRect.h) / 2;
+			bool rectangleCollected = false;
 
-				bool quit = false;
-				while (true)
-				{
-					SDL_SetRenderDrawColor(renderer, 0xFF, 0xFF, 0xFF, 0xFF);
-					SDL_RenderClear(renderer);
+			double originalX = 0;
+			double originalY = 0;
+			double previousNoteWidth = 0;
+			double slidingDown = 0;
+			std::wstring slideLyric;
 
-					textSurface = UpdateSurface();
+			bool pushed = false;
+
+			bool quit = false;
+			while (true)
+			{
+				SDL_SetRenderDrawColor(renderer, 0xFF, 0xFF, 0xFF, 0xFF);
+				SDL_RenderClear(renderer);
+
+				note = GetNoteToDisplay();
+
+				if (std::get<3>(note) == RGB(255, 255, 255)) {
+
+					textSurface = UpdateSurface(note);
 					text = SDL_CreateTextureFromSurface(renderer, textSurface);
 
 					textRect.w = textSurface->w;
@@ -498,13 +712,139 @@ void RenderVideo() {
 
 					textRect.x = (windowWidth - textRect.w) / 2;
 					textRect.y = (windowHeight - textRect.h) / 2;
+					SDL_RenderCopy(renderer, text, NULL, &textRect);
+
+					/* Ball and variable cleanup */
+					
+					walk = 0;
+					bounce = 100;
+					half = 0;
+					originalX = 0;
+					previousNoteWidth = 0;
+					surfacesToDraw.clear();
+					rectanglesForSurfaces.clear();
+				} 
+				else if (std::get<3>(note) == RGB(255, 0, 0)) {
+
+					ballSurface = BouncingBall(note);
+					ball = SDL_CreateTextureFromSurface(renderer, ballSurface);
+
+					ballRectangle.w = ballSurface->w;
+					ballRectangle.h = ballSurface->h;
+					SDL_FreeSurface(ballSurface);
+
+					/* Calculating the fake text. */
+					textSurface = UpdateSurface(note);
+					text = SDL_CreateTextureFromSurface(renderer, textSurface);
+					textRect.w = textSurface->w;
+					textRect.h = textSurface->h;
+					SDL_FreeSurface(textSurface);
+					textRect.x = (windowWidth - textRect.w) / 2;
+					textRect.y = (windowHeight - textRect.h) / 2;
+
+					ballRectangle.x = textRect.x + GetWalkFactor(note);
+					ballRectangle.y = (windowHeight - ballRectangle.h) / 2 - GetBounceFactor(note);
+
+					SDL_RenderCopy(renderer, ball, NULL, &ballRectangle);
+					SDL_RenderCopy(renderer, text, NULL, &textRect);
+
+					originalX = 0;
+					previousNoteWidth = 0;
+					surfacesToDraw.clear();
+					rectanglesForSurfaces.clear();
+				}
+				else if (std::get<3>(note) == RGB(0, 0, 255)) {
+
+					/* Calculating the fake text rectangle. */
+					
+					if (originalX == 0) {
+
+						textSurface = UpdateSurface(note);
+						textRect.w = textSurface->w;
+						textRect.h = textSurface->h;
+						SDL_FreeSurface(textSurface);
+						textRect.x = (windowWidth - textRect.w) / 2;
+						textRect.y = (windowHeight - textRect.h) / 2;
+
+						originalX = textRect.x;
+						originalY = textRect.y;
+
+						textRect.y = 0;
+					}
+
+					note = GetGroupedNoteToDisplay();
+
+					/* Calculating the shown text rectangle. */
+					textSurface = UpdateSurface(note);
+					text = SDL_CreateTextureFromSurface(renderer, textSurface);
+					textRect.w = textSurface->w;
+					textRect.h = textSurface->h;
+
+					/* Note change.*/
+
+					if (std::get<0>(previousNote).left != std::get<0>(note).left) {
+
+						textRect.x += previousNoteWidth;
+						previousNote = note;
+						previousNoteWidth = textRect.w;
+						textRect.y = 0;
+						pushed = false;
+						rectangleCollected = false;
+					}
+					else {
+
+						if (textRect.y <= originalY) {
+							textRect.y += 2;
+						}
+						else {
+
+							if (rectangleCollected == false) {
+								rectangleCollected = true;
+								rectanglesForSurfaces.push_back(textRect);
+							}
+
+							if (pushed == false) {
+								
+								surfacesToDraw.push_back(textSurface);
+								pushed = true;
+							}
+						}
+					}
 
 					SDL_RenderCopy(renderer, text, NULL, &textRect);
-					SDL_RenderPresent(renderer);
+
+					if (surfacesToDraw.empty() == false) {
+
+						int index = 0;
+						for (SDL_Surface* surface : surfacesToDraw) {
+							text = SDL_CreateTextureFromSurface(renderer, surface);
+							SDL_RenderCopy(renderer, text, NULL, &rectanglesForSurfaces[index]);
+							index++;
+						}
+						
+					}
+
+					walk = 0;
+					bounce = 100;
+					half = 0;
+
+					previousNote = note;
+				}
+				else {
+					walk = 0;
+					bounce = 100;
+					half = 0;
+					originalX = 0;
+					previousNoteWidth = 0;
+					surfacesToDraw.clear();
+					rectanglesForSurfaces.clear();
 				}
 
-				SDL_DestroyRenderer(renderer);
+				SDL_RenderPresent(renderer);
 			}
+
+			SDL_DestroyRenderer(renderer);
+
 		}
 
 		SDL_DestroyWindow(window);
@@ -669,8 +1009,17 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam)
 			AddEffect(hWnd, colorToChange);
 			break;
 		}
-		case ID_EFFECTS_GROUP: {
+		case ID_GROUP_BOUNCINGBALL: {
+
+			colorToChange = RGB(255, 0, 0);
 			AddGrouping(hWnd);
+			AddEffect(hWnd, colorToChange);
+			break;
+		}
+		case ID_TRANSLATIONS_SLIDEDOWN: {
+			colorToChange = RGB(0, 0, 255);
+			AddGrouping(hWnd);
+			AddEffect(hWnd, colorToChange);
 			break;
 		}
 		case ID_EFFECTS_FONTSIZE: {
@@ -721,6 +1070,8 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam)
 			startingTime = clock();
 			PlaySoundA(mp3File.c_str(), NULL, SND_FILENAME | SND_ASYNC);
 
+			AllocConsole();
+			freopen_s((FILE**)stdout, "CONOUT$", "w", stdout);
 			RenderVideo();
 
 			break;
@@ -840,7 +1191,7 @@ INT_PTR CALLBACK FontBox(HWND hDlg, UINT message, WPARAM wParam, LPARAM lParam)
 			GetWindowTextA(input, userInput, dwInputLength + 1);
 
 			EndDialog(hDlg, LOWORD(wParam));
-			
+
 			addFont = true;
 			return (INT_PTR)TRUE;
 		}
