@@ -12,7 +12,6 @@
   </ItemGroup>
   <ItemGroup>
     <ResourceCompile Include="USTSync.rc" />
-    <ResourceCompile Include="VideoWindow.rc" />
   </ItemGroup>
   <ItemGroup>
     <Image Include="USTSync.ico" />
